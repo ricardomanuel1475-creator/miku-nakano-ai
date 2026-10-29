@@ -1,19 +1,20 @@
-from flask import Flask, render_template_string, request, jsonify
+from flask import Flask, render_template_string, request, jsonify, session
+import os
 from groq import Groq
+from duckduckgo_search import DDGS
+import uuid
 
 app = Flask(__name__)
+app.secret_key = 'miku_nakano_ultra_secret_2026' # Llave para las sesiones
 
 # ==========================================
 # CONFIGURACIÓN DE LA IA
-# PEGA TU CLAVE DE GROQ AQUÍ ABAJO (la que empieza con gsk_)
 # ==========================================
-import os
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "TU_CLAVE_AQUI")
-
 cliente = Groq(api_key=GROQ_API_KEY)
 
-# Historial de la conversación
-historial_chat = [{"role": "system", "content": "Eres Miku Nakano. Tu personalidad es dulce, cálida, amable y un poco tímida. Siempre buscas hacer sentir bien a la persona con la que hablas. IMPORTANTE: No uses apelativos como 'Director', 'Tú' ni ningún otro pronombre o título para dirigirte al usuario, a menos que el usuario te indique explícitamente cómo llamarlo. Responde en español de forma concisa, pero con un tono muy cariñoso y natural."}]
+# Diccionario para guardar el historial privado de cada usuario
+historiales = {}
 
 # --- LA INTERFAZ WEB (HTML/CSS) ---
 HTML = """
@@ -43,7 +44,7 @@ HTML = """
         .mensaje-miku b { color: #2a6f97; }
         
         /* Barra de entrada */
-        input-area { padding: 15px; padding-bottom: 25px; border-top: 1px solid #eee; display: flex; gap: 10px; background: #fafafa; }
+        .input-area { padding: 15px; padding-bottom: 25px; border-top: 1px solid #eee; display: flex; gap: 10px; background: #fafafa; }
         input { flex: 1; padding: 15px; border-radius: 30px; border: 1px solid #ddd; outline: none; font-size: 1rem; transition: 0.3s; }
         input:focus { border-color: #4aa3df; box-shadow: 0 0 0 3px rgba(74, 163, 223, 0.2); }
         button { padding: 15px 30px; background: #4aa3df; color: white; border: none; border-radius: 30px; cursor: pointer; font-weight: bold; transition: 0.3s; }
@@ -119,6 +120,29 @@ def index():
 def responder():
     data = request.get_json()
     mensaje = data.get('mensaje')
+    
+    # Si el usuario no tiene un ID de sesión, se lo creamos
+    if 'user_id' not in session:
+        session['user_id'] = str(uuid.uuid4())
+        historiales[session['user_id']] = [
+            {"role": "system", "content": "Eres Miku Nakano. Tu personalidad es dulce, cálida, amable y un poco tímida. IMPORTANTE: No uses apelativos como 'Director' ni 'Tú' a menos que te lo pidan. Responde en español de forma concisa y cariñosa."}
+        ]
+    
+    user_id = session['user_id']
+    historial_chat = historiales[user_id]
+    
+    # Herramienta de búsqueda
+    texto_lower = mensaje.lower()
+    if "busca" in texto_lower or "investiga" in texto_lower or "qué es" in texto_lower:
+        query = texto_lower.replace("miku", "").replace("busca", "").replace("investiga", "").replace("qué es", "").strip()
+        if query:
+            try:
+                resultados = DDGS().text(query, max_results=3)
+                info_web = "\n".join([f"- {r['title']}: {r['body']}" for r in resultados])
+                historial_chat.append({"role": "system", "content": f"Información extraída de internet sobre '{query}':\n{info_web}"})
+            except Exception as e:
+                print("Error buscando en internet:", e)
+
     historial_chat.append({"role": "user", "content": mensaje})
     
     try:
