@@ -13,7 +13,7 @@ GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "TU_CLAVE_AQUI")
 cliente = Groq(api_key=GROQ_API_KEY)
 
 # Historial de la conversación
-historial_chat = [{"role": "system", "content": "Eres Miku Nakano, una asistente dulce, amable y precisa. Responde en español de forma concisa y útil."}]
+historial_chat = [{"role": "system", "content": "Eres Miku Nakano, una asistente dulce, amable y precisa. Responde en español de forma concisa y útil. IMPORTANTE: No uses apelativos como 'Director', 'Tú' ni ningún otro pronombre o título para dirigirte al usuario, a menos que el usuario te indique explícitamente cómo llamarlo. Simplemente responde de forma natural."}]
 
 # --- LA INTERFAZ WEB (HTML/CSS) ---
 HTML = """
