@@ -24,7 +24,7 @@ HTML = """
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: 'Segoe UI', Arial, sans-serif; background-color: #f0f7ff; display: flex; height: 100vh; overflow: hidden; }
+        body { font-family: 'Segoe UI', Arial, sans-serif; background-color: #f0f7ff; display: flex; height: 100dvh; overflow: hidden; }
         
         /* Panel izquierdo: Imagen de Miku */
         .sidebar { width: 300px; background: linear-gradient(180deg, #dff5ff 0%, #b3e0ff 100%); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; border-right: 2px solid #b3d9ff; }
@@ -43,7 +43,7 @@ HTML = """
         .mensaje-miku b { color: #2a6f97; }
         
         /* Barra de entrada */
-        .input-area { padding: 20px; border-top: 1px solid #eee; display: flex; gap: 10px; background: #fafafa; }
+        input-area { padding: 15px; padding-bottom: 25px; border-top: 1px solid #eee; display: flex; gap: 10px; background: #fafafa; }
         input { flex: 1; padding: 15px; border-radius: 30px; border: 1px solid #ddd; outline: none; font-size: 1rem; transition: 0.3s; }
         input:focus { border-color: #4aa3df; box-shadow: 0 0 0 3px rgba(74, 163, 223, 0.2); }
         button { padding: 15px 30px; background: #4aa3df; color: white; border: none; border-radius: 30px; cursor: pointer; font-weight: bold; transition: 0.3s; }
@@ -52,7 +52,7 @@ HTML = """
         /* Para celulares */
         @media (max-width: 768px) {
             body { flex-direction: column; }
-            .sidebar { width: 100%; height: 200px; flex-direction: row; padding: 10px; }
+            .sidebar { width: 100%; height: 180px; flex-direction: row; padding: 10px; }
             .sidebar img { max-width: 120px; }
             .sidebar h2 { font-size: 1.2rem; margin-top: 0; margin-left: 15px; }
         }
