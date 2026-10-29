@@ -69,7 +69,7 @@ HTML = """
     <div class="main-chat">
         <div class="chat-header">💬 Conversación con Miku</div>
         <div id="chat">
-            <div class="mensaje mensaje-miku"><b>Miku:</b> ¡Hola, Director! 💙 Me alegra mucho verte por aquí. ¿En qué puedo ayudarte hoy?</div>
+            <div class="mensaje mensaje-miku"><b>Miku:</b> ¡Hola! 💙 Me alegra mucho verte por aquí. ¿En qué puedo ayudarte hoy?</div>
         </div>
         <div class="input-area">
             <input type="text" id="mensaje" placeholder="Escribe algo..." onkeypress="if(event.key === 'Enter') enviar()">
