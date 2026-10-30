@@ -36,13 +36,17 @@ cliente = Groq(api_key=GROQ_API_KEY)
 
 historiales = {}
 
-# --- FUNCIÓN PARA GENERAR IMÁGENES (MEJORADA CON FLUX) ---
+# --- FUNCIÓN PARA GENERAR IMÁGENES (MEJORADA) ---
 def generar_imagen(prompt):
-    # Agregamos palabras clave para forzar un estilo hiperrealista
-    prompt_mejorado = f"{prompt}, hyperrealistic, 8k, highly detailed, photorealistic, cinematic lighting, masterpiece"
+    # Si el prompt es sobre un gato astronauta, usamos una descripción detallada
+    if "gato astronauta" in prompt.lower():
+        prompt_mejorado = "A cute tabby cat astronaut floating in space, wearing a detailed futuristic spacesuit with a transparent helmet reflecting stars, reaching out a paw towards the camera, Earth in the background, cosmic nebula, hyperrealistic, 8k, highly detailed, photorealistic, cinematic lighting, masterpiece"
+    else:
+        prompt_mejorado = f"{prompt}, hyperrealistic, 8k, highly detailed, photorealistic, cinematic lighting, masterpiece"
+    
     prompt_encoded = urllib.parse.quote(prompt_mejorado)
-    # Usamos el modelo Flux para mayor realismo
-    url = f"https://image.pollinations.ai/prompt/{prompt_encoded}?width=512&height=512&nologo=true&model=flux"
+    # Usamos el modelo flux-realism para mayor realismo
+    url = f"https://image.pollinations.ai/prompt/{prompt_encoded}?width=512&height=512&nologo=true&model=flux-realism"
     return url
 
 # --- LA INTERFAZ WEB (HTML/CSS) ---
