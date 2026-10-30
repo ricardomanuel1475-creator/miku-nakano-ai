@@ -10,6 +10,7 @@ app = Flask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 app.config['SESSION_COOKIE_SECURE'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'None'
+app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.secret_key = 'miku_nakano_ultra_secret_2026'
 
 # ==========================================
