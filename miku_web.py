@@ -1,3 +1,4 @@
+from flask_session import Session
 from flask import Flask, render_template_string, request, jsonify, session, redirect, url_for
 from werkzeug.middleware.proxy_fix import ProxyFix
 import os
@@ -12,6 +13,9 @@ app.config['SESSION_COOKIE_SECURE'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'None'
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "miku_nakano_ultra_secret_2026")
+app.config['SESSION_TYPE'] = 'filesystem'
+app.config['SESSION_FILE_DIR'] = './flask_session/'
+Session(app)
 
 # ==========================================
 # CONFIGURACIÓN DE GOOGLE (AUTH)
