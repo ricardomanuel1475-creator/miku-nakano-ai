@@ -5,3 +5,4 @@ gunicorn==21.2.0
 duckduckgo-search
 authlib==1.3.0
 requests
+Flask-Session
