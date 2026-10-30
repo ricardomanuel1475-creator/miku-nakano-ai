@@ -17,8 +17,8 @@ app.secret_key = os.environ.get("FLASK_SECRET_KEY")
 # ==========================================
 # CONFIGURACIÓN DE GOOGLE (AUTH)
 # ==========================================
-app.config['GOOGLE_CLIENT_ID'] = GOOGLE_CLIENT_ID
-app.config['GOOGLE_CLIENT_SECRET'] = GOOGLE_CLIENT_SECRET
+app.config['GOOGLE_CLIENT_ID'] = "183518295635-devpot1v7r6v8902r0d53vdqqatjeu7a.apps.googleusercontent.com"
+app.config['GOOGLE_CLIENT_SECRET'] = "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"
 
 oauth = OAuth(app)
 oauth.register(
