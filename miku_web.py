@@ -36,10 +36,13 @@ cliente = Groq(api_key=GROQ_API_KEY)
 
 historiales = {}
 
-# --- FUNCIÓN PARA GENERAR IMÁGENES ---
+# --- FUNCIÓN PARA GENERAR IMÁGENES (MEJORADA CON FLUX) ---
 def generar_imagen(prompt):
-    prompt_encoded = urllib.parse.quote(prompt)
-    url = f"https://image.pollinations.ai/prompt/{prompt_encoded}?width=512&height=512&nologo=true"
+    # Agregamos palabras clave para forzar un estilo hiperrealista
+    prompt_mejorado = f"{prompt}, hyperrealistic, 8k, highly detailed, photorealistic, cinematic lighting, masterpiece"
+    prompt_encoded = urllib.parse.quote(prompt_mejorado)
+    # Usamos el modelo Flux para mayor realismo
+    url = f"https://image.pollinations.ai/prompt/{prompt_encoded}?width=512&height=512&nologo=true&model=flux"
     return url
 
 # --- LA INTERFAZ WEB (HTML/CSS) ---
@@ -119,14 +122,19 @@ HTML = """
             
             let respuestaFormateada = data.respuesta;
             
-            // Detectar si hay una imagen generada
+            // Si la respuesta contiene una imagen
             if (respuestaFormateada.includes("[IMAGEN]")) {
                 const url = respuestaFormateada.split("[IMAGEN]")[1].split("[/IMAGEN]")[0];
-                const texto = respuestaFormateada.split("[IMAGEN]")[0];
-                respuestaFormateada = `${texto}<br><img src="${url}" style="max-width: 100%; border-radius: 10px; margin-top: 5px;">`;
+                let texto = respuestaFormateada.split("[IMAGEN]")[0];
+                
+                // Limpiamos la etiqueta [CREANDO]
+                texto = texto.replace("[CREANDO]", "");
+                
+                // Mostramos el texto y luego la imagen
+                document.getElementById(idPensando).innerHTML = `<b>Miku:</b> ${texto}<br><img src="${url}" style="max-width: 100%; border-radius: 10px; margin-top: 10px;">`;
+            } else {
+                document.getElementById(idPensando).innerHTML = `<b>Miku:</b> ${respuestaFormateada}`;
             }
-            
-            document.getElementById(idPensando).innerHTML = `<b>Miku:</b> ${respuestaFormateada}`;
             chat.scrollTop = chat.scrollHeight;
         }
     </script>
@@ -166,10 +174,10 @@ def responder():
     # --- DETECCIÓN DE GENERACIÓN DE IMAGEN ---
     texto_lower = mensaje.lower()
     if any(palabra in texto_lower for palabra in ["genera una imagen", "crea una imagen", "dibuja", "hazme una imagen", "haz una imagen", "genera", "crea", "dibujo", "imagen de"]):
-        prompt = texto_lower.replace("miku", "").replace("genera una imagen", "").replace("crea una imagen", "").replace("dibuja", "").strip()
+        prompt = texto_lower.replace("miku", "").replace("genera una imagen", "").replace("crea una imagen", "").replace("dibuja", "").replace("hazme una imagen", "").replace("haz una imagen", "").strip()
         if prompt:
             url_imagen = generar_imagen(prompt)
-            return jsonify({"respuesta": f"¡Claro! Aquí tienes tu imagen: [IMAGEN]{url_imagen}[/IMAGEN]"})
+            return jsonify({"respuesta": f"[CREANDO]¡Claro! Dame un momento, estoy creando tu imagen... 🎨[IMAGEN]{url_imagen}[/IMAGEN]"})
 
     # --- LÓGICA DE CHAT NORMAL Y BÚSQUEDA ---
     if user_id not in historiales:
