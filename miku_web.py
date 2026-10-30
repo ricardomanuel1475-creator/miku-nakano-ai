@@ -1,4 +1,5 @@
 from flask import Flask, render_template_string, request, jsonify, session, redirect, url_for
+from werkzeug.middleware.proxy_fix import ProxyFix
 import os
 from groq import Groq
 from duckduckgo_search import DDGS
@@ -6,6 +7,9 @@ from authlib.integrations.flask_client import OAuth
 import uuid
 
 app = Flask(__name__)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
+app.config['SESSION_COOKIE_SECURE'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'None'
 app.secret_key = 'miku_nakano_ultra_secret_2026'
 
 # ==========================================
