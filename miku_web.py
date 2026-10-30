@@ -17,14 +17,12 @@ app.secret_key = os.environ.get("FLASK_SECRET_KEY")
 # ==========================================
 # CONFIGURACIÓN DE GOOGLE (AUTH)
 # ==========================================
-GOOGLE_CLIENT_ID = "183518295635-devpot1v7r6v8902r0d53vdqqatjeu7a.apps.googleusercontent.com"
-GOOGLE_CLIENT_SECRET = "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"
+app.config['GOOGLE_CLIENT_ID'] = GOOGLE_CLIENT_ID
+app.config['GOOGLE_CLIENT_SECRET'] = GOOGLE_CLIENT_SECRET
 
 oauth = OAuth(app)
 oauth.register(
     name='google',
-    client_id=GOOGLE_CLIENT_ID,
-    client_secret=GOOGLE_CLIENT_SECRET,
     server_metadata_url='https://accounts.google.com/.well-known/openid-configuration',
     client_kwargs={'scope': 'openid email profile'}
 )
@@ -123,7 +121,6 @@ def index():
     user_name = session['user'].get('name', 'Usuario')
     return render_template_string(HTML, user_name=user_name)
 
-@app.route('/login')
 @app.route('/login')
 def login():
     redirect_uri = url_for('authorize', _external=True)
