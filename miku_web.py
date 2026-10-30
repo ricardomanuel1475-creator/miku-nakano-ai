@@ -124,12 +124,10 @@ def index():
     return render_template_string(HTML, user_name=user_name)
 
 @app.route('/login')
+@app.route('/login')
 def login():
     redirect_uri = url_for('authorize', _external=True)
-    # En lugar de authorize_redirect, creamos la URL y guardamos el estado manualmente
-    rv = oauth.google.create_authorization_url(redirect_uri)
-    oauth.google.save_authorize_data(request, redirect_uri=redirect_uri, **rv)
-    return redirect(rv['url'])
+    return oauth.google.authorize_redirect(redirect_uri)
 
 @app.route('/authorize')
 def authorize():
