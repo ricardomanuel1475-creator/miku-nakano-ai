@@ -5,6 +5,8 @@ from groq import Groq
 from duckduckgo_search import DDGS
 from authlib.integrations.flask_client import OAuth
 import uuid
+import requests
+import urllib.parse
 
 app = Flask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1, x_prefix=1)
@@ -13,12 +15,11 @@ app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.secret_key = os.environ.get("FLASK_SECRET_KEY")
 
-
 # ==========================================
 # CONFIGURACIÓN DE GOOGLE (AUTH)
 # ==========================================
 app.config['GOOGLE_CLIENT_ID'] = "183518295635-devpot1v7r6v8902r0d53vdqqatjeu7a.apps.googleusercontent.com"
-app.config['GOOGLE_CLIENT_SECRET'] = "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"
+app.config['GOOGLE_CLIENT_SECRET'] = "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"
 
 oauth = OAuth(app)
 oauth.register(
@@ -33,8 +34,13 @@ oauth.register(
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "TU_CLAVE_AQUI")
 cliente = Groq(api_key=GROQ_API_KEY)
 
-# Diccionario para guardar el historial privado de cada usuario
 historiales = {}
+
+# --- FUNCIÓN PARA GENERAR IMÁGENES ---
+def generar_imagen(prompt):
+    prompt_encoded = urllib.parse.quote(prompt)
+    url = f"https://image.pollinations.ai/prompt/{prompt_encoded}?width=512&height=512&nologo=true"
+    return url
 
 # --- LA INTERFAZ WEB (HTML/CSS) ---
 HTML = """
@@ -88,25 +94,39 @@ HTML = """
             <button onclick="enviar()">Enviar</button>
         </div>
     </div>
+
     <script>
         async function enviar() {
             const input = document.getElementById('mensaje');
             const chat = document.getElementById('chat');
             const mensaje = input.value;
             if (!mensaje) return;
+            
             chat.innerHTML += `<div class="mensaje mensaje-usuario"><b>Tú:</b> ${mensaje}</div>`;
             input.value = '';
             chat.scrollTop = chat.scrollHeight;
+
             const idPensando = 'pensando-' + Date.now();
             chat.innerHTML += `<div class="mensaje mensaje-miku" id="${idPensando}"><b>Miku:</b> Pensando... 💭</div>`;
             chat.scrollTop = chat.scrollHeight;
+
             const response = await fetch('/responder', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ mensaje: mensaje })
             });
             const data = await response.json();
-            document.getElementById(idPensando).innerHTML = `<b>Miku:</b> ${data.respuesta}`;
+            
+            let respuestaFormateada = data.respuesta;
+            
+            // Detectar si hay una imagen generada
+            if (respuestaFormateada.includes("[IMAGEN]")) {
+                const url = respuestaFormateada.split("[IMAGEN]")[1].split("[/IMAGEN]")[0];
+                const texto = respuestaFormateada.split("[IMAGEN]")[0];
+                respuestaFormateada = `${texto}<br><img src="${url}" style="max-width: 100%; border-radius: 10px; margin-top: 5px;">`;
+            }
+            
+            document.getElementById(idPensando).innerHTML = `<b>Miku:</b> ${respuestaFormateada}`;
             chat.scrollTop = chat.scrollHeight;
         }
     </script>
@@ -143,13 +163,22 @@ def responder():
     mensaje = data.get('mensaje')
     user_id = session['user_id']
     
+    # --- DETECCIÓN DE GENERACIÓN DE IMAGEN ---
+    texto_lower = mensaje.lower()
+    if any(palabra in texto_lower for palabra in ["genera una imagen", "crea una imagen", "dibuja", "hazme una imagen", "haz una imagen", "genera", "crea", "dibujo", "imagen de"]):
+        prompt = texto_lower.replace("miku", "").replace("genera una imagen", "").replace("crea una imagen", "").replace("dibuja", "").strip()
+        if prompt:
+            url_imagen = generar_imagen(prompt)
+            return jsonify({"respuesta": f"¡Claro! Aquí tienes tu imagen: [IMAGEN]{url_imagen}[/IMAGEN]"})
+
+    # --- LÓGICA DE CHAT NORMAL Y BÚSQUEDA ---
     if user_id not in historiales:
         historiales[user_id] = [
             {"role": "system", "content": "Eres Miku Nakano. Tu personalidad es dulce, cálida, amable y un poco tímida. IMPORTANTE: No uses apelativos como 'Director' ni 'Tú' a menos que te lo pidan. Responde en español de forma concisa y cariñosa."}
         ]
     
     historial_chat = historiales[user_id]
-    texto_lower = mensaje.lower()
+    
     if "busca" in texto_lower or "investiga" in texto_lower:
         query = texto_lower.replace("miku", "").replace("busca", "").replace("investiga", "").strip()
         if query:
@@ -160,6 +189,7 @@ def responder():
             except: pass
 
     historial_chat.append({"role": "user", "content": mensaje})
+    
     try:
         completion = cliente.chat.completions.create(
             model="openai/gpt-oss-120b",
