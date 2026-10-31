@@ -9,6 +9,7 @@ import requests
 import urllib.parse
 import base64
 import json
+import time
 
 app = Flask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1, x_prefix=1)
@@ -37,33 +38,33 @@ GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "TU_CLAVE_AQUI")
 cliente = Groq(api_key=GROQ_API_KEY)
 
 # ==========================================
-# CONFIGURACIÓN DE CLOUDFLARE (IMÁGENES)
+# CONFIGURACIÓN DE POLLINATIONS (IMÁGENES GRATIS)
 # ==========================================
-CLOUDFLARE_ACCOUNT_ID = "b5cc836dcf39c9e98b583f5269357df"
-CLOUDFLARE_API_TOKEN = "cfut_CaYJ4rENMjEmJg0e5vQa1VrhAQ51UjN5mbMLJxkQf4b1a8a2"
-
 def generar_imagen(prompt):
-    url = f"https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai/run/@cf/black-forest-labs/flux-1-schnell"
+    # Usamos flux-realism para máxima calidad y enhance=true para que la IA mejore el prompt
+    prompt_encoded = urllib.parse.quote(prompt)
+    url = f"https://image.pollinations.ai/prompt/{prompt_encoded}?width=1024&height=1024&nologo=true&model=flux-realism&enhance=true"
     
-    headers = {
-        "Authorization": f"Bearer {CLOUDFLARE_API_TOKEN}",
-        "Content-Type": "application/json"
-    }
+    # Intentamos hasta 3 veces si el servidor está saturado
+    for intento in range(3):
+        try:
+            response = requests.get(url, timeout=60)
+            if response.status_code == 200:
+                # Convertimos la imagen a base64 para mostrarla en el chat
+                b64_imagen = base64.b64encode(response.content).decode('utf-8')
+                return f"data:image/jpeg;base64,{b64_imagen}"
+            elif response.status_code == 429 or response.status_code == 503:
+                # Si está saturado, esperamos 3 segundos y reintentamos
+                time.sleep(3)
+                continue
+            else:
+                print(f"Error de Pollinations: {response.status_code}")
+                return None
+        except Exception as e:
+            print(f"Error generando imagen con Pollinations: {e}")
+            time.sleep(3)
     
-    # Quitamos width y height (flux-1-schnell no los acepta)
-    payload = {
-        "prompt": f"Professional photography of {prompt}, shot on Sony A7R IV, 85mm lens, f/1.4, natural soft lighting, cinematic composition, hyperrealistic, 8k resolution, extremely detailed, sharp focus, depth of field, masterpiece"
-    }
-    
-    try:
-        response = requests.post(url, headers=headers, json=payload, timeout=60)
-        response.raise_for_status()
-        data = response.json()
-        b64_imagen = data["result"]["image"]
-        return f"data:image/jpeg;base64,{b64_imagen}"
-    except Exception as e:
-        print(f"Error generando imagen con Cloudflare: {e}")
-        return None
+    return None
 
 historiales = {}
 
@@ -196,7 +197,7 @@ def responder():
             if url_imagen:
                 return jsonify({"respuesta": f"[CREANDO]¡Claro! Dame un momento, estoy creando tu imagen... 🎨[IMAGEN]{url_imagen}[/IMAGEN]"})
             else:
-                return jsonify({"respuesta": "Lo siento, tuve un problema al generar la imagen. Intenta de nuevo."})
+                return jsonify({"respuesta": "Lo siento, el servidor de imágenes está muy ocupado. Intenta de nuevo en unos segundos."})
 
     if user_id not in historiales:
         historiales[user_id] = [
