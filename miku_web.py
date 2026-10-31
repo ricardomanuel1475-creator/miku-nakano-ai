@@ -43,9 +43,6 @@ CLOUDFLARE_ACCOUNT_ID = "b5cc836dcf39c9e98b583f5269357df"
 CLOUDFLARE_API_TOKEN = "cfut_CaYJ4rENMjEmJg0e5vQa1VrhAQ51UjN5mbMLJxkQf4b1a8a2"
 
 def generar_imagen(prompt):
-    prompt_mejorado = f"Professional photography of {prompt}, shot on Sony A7R IV, 85mm lens, f/1.4, natural soft lighting, cinematic composition, hyperrealistic, 8k resolution, extremely detailed, sharp focus, depth of field, masterpiece"
-    
-    # URL directa al modelo (sin variable intermedia para evitar errores)
     url = f"https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai/run/@cf/black-forest-labs/flux-1-schnell"
     
     headers = {
@@ -53,10 +50,13 @@ def generar_imagen(prompt):
         "Content-Type": "application/json"
     }
     
-    payload = {"prompt": prompt_mejorado, "width": 1024, "height": 1024}
+    payload = {
+        "prompt": f"Professional photography of {prompt}, shot on Sony A7R IV, 85mm lens, f/1.4, natural soft lighting, cinematic composition, hyperrealistic, 8k resolution, extremely detailed, sharp focus, depth of field, masterpiece",
+        "width": 1024,
+        "height": 1024
+    }
     
     try:
-        # Usamos json=payload (el formato que SÍ funciona con flux-1-schnell)
         response = requests.post(url, headers=headers, json=payload, timeout=60)
         response.raise_for_status()
         data = response.json()
