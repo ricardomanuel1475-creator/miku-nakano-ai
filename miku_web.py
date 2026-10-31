@@ -37,23 +37,20 @@ GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "TU_CLAVE_AQUI")
 cliente = Groq(api_key=GROQ_API_KEY)
 
 # ==========================================
-# FUNCIÓN PARA MEJORAR EL PROMPT (RESPETANDO LA PETICIÓN)
+# FUNCIÓN PARA MEJORAR EL PROMPT (CON OJOS Y PELAJE)
 # ==========================================
 def mejorar_prompt(prompt_usuario):
-    # Le pedimos a Groq que expanda la petición del usuario, pero SIN inventar cosas que no pidió
     instrucciones = f"""
     Eres un experto en "Prompt Engineering" para modelos de generación de imágenes.
     El usuario ha pedido: "{prompt_usuario}"
     
     Tu tarea es reescribir esta petición en un prompt en inglés, ultra-detallado, que respete EXACTAMENTE lo que el usuario pidió.
-    NO añadas elementos que el usuario no haya mencionado (por ejemplo, si pide un gato, NO le pongas traje de astronauta).
+    NO añadas elementos que el usuario no haya mencionado.
     
-    Debes incluir:
-    1. El sujeto principal (ej. un gato, una chica, un paisaje).
-    2. La acción o pose (ej. sentado, sonriendo, corriendo).
-    3. La vestimenta o accesorios (SOLO si el usuario lo menciona).
-    4. El entorno o fondo (SOLO si el usuario lo menciona).
-    5. La iluminación y estilo (ej. luz cinematográfica, hiperrealista, 8k, lente de 85mm).
+    IMPORTANTE: Asegúrate de incluir estas palabras clave para evitar errores visuales:
+    - "perfect symmetric eyes, sharp focus on both eyes, detailed iris and pupil"
+    - "flawless fur texture, highly detailed hair"
+    - "professional photography, 8k resolution, hyperrealistic, masterpiece"
     
     Devuelve SOLO el prompt en inglés, sin explicaciones, listo para ser usado en una IA de imágenes.
     """
@@ -68,14 +65,10 @@ def mejorar_prompt(prompt_usuario):
         return completion.choices[0].message.content.strip()
     except Exception as e:
         print(f"Error mejorando prompt: {e}")
-        # Si falla Groq, usamos el prompt original con palabras clave de calidad
-        return f"Professional photography of {prompt_usuario}, hyperrealistic, 8k, highly detailed, cinematic lighting, masterpiece"
+        return f"Professional photography of {prompt_usuario}, perfect symmetric eyes, flawless fur texture, hyperrealistic, 8k, highly detailed, cinematic lighting, masterpiece"
 
 def generar_imagen(prompt_usuario):
-    # 1. Mejoramos el prompt usando Groq (respetando la petición)
     prompt_maestro = mejorar_prompt(prompt_usuario)
-    
-    # 2. Codificamos el prompt y llamamos a Pollinations
     prompt_encoded = urllib.parse.quote(prompt_maestro)
     url = f"https://image.pollinations.ai/prompt/{prompt_encoded}?width=1024&height=1024&nologo=true&model=flux-realism"
     
