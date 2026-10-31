@@ -38,15 +38,13 @@ historiales = {}
 
 # --- FUNCIÓN PARA GENERAR IMÁGENES (MEJORADA) ---
 def generar_imagen(prompt):
-    # Si el prompt es sobre un gato astronauta, usamos una descripción detallada
-    if "gato astronauta" in prompt.lower():
-        prompt_mejorado = "A cute tabby cat astronaut floating in space, wearing a detailed futuristic spacesuit with a transparent helmet reflecting stars, reaching out a paw towards the camera, Earth in the background, cosmic nebula, hyperrealistic, 8k, highly detailed, photorealistic, cinematic lighting, masterpiece"
-    else:
-        prompt_mejorado = f"{prompt}, hyperrealistic, 8k, highly detailed, photorealistic, cinematic lighting, masterpiece"
+    # Prompt detallado con lenguaje técnico de fotografía
+    prompt_mejorado = f"Professional photography of {prompt}, shot on Sony A7IV, 50mm lens, f/1.8, natural lighting, cinematic composition, hyperrealistic, 8k resolution, extremely detailed, sharp focus, masterpiece"
     
     prompt_encoded = urllib.parse.quote(prompt_mejorado)
-    # Usamos el modelo flux-realism para mayor realismo
-    url = f"https://image.pollinations.ai/prompt/{prompt_encoded}?width=512&height=512&nologo=true&model=flux-realism"
+    
+    # Usamos flux-realism y activamos enhance=true para que la IA expanda el prompt
+    url = f"https://image.pollinations.ai/prompt/{prompt_encoded}?width=768&height=768&nologo=true&model=flux-realism&enhance=true"
     return url
 
 # --- LA INTERFAZ WEB (HTML/CSS) ---
