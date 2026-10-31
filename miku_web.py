@@ -50,10 +50,9 @@ def generar_imagen(prompt):
         "Content-Type": "application/json"
     }
     
+    # Quitamos width y height (flux-1-schnell no los acepta)
     payload = {
-        "prompt": f"Professional photography of {prompt}, shot on Sony A7R IV, 85mm lens, f/1.4, natural soft lighting, cinematic composition, hyperrealistic, 8k resolution, extremely detailed, sharp focus, depth of field, masterpiece",
-        "width": 1024,
-        "height": 1024
+        "prompt": f"Professional photography of {prompt}, shot on Sony A7R IV, 85mm lens, f/1.4, natural soft lighting, cinematic composition, hyperrealistic, 8k resolution, extremely detailed, sharp focus, depth of field, masterpiece"
     }
     
     try:
