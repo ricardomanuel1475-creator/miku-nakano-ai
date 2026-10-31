@@ -54,7 +54,7 @@ def generar_imagen(prompt):
     payload = {"prompt": prompt_mejorado, "width": 1024, "height": 1024}
     
     try:
-        response = requests.post(url, headers=headers, json=payload, timeout=60)
+        response = requests.post(url, headers=headers, data=json.dumps(payload).encode('utf-8'), timeout=60)
         response.raise_for_status()
         data = response.json()
         b64_imagen = data["result"]["image"]
