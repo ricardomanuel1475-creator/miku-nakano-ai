@@ -36,15 +36,16 @@ cliente = Groq(api_key=GROQ_API_KEY)
 
 historiales = {}
 
-# --- FUNCIÓN PARA GENERAR IMÁGENES (PROMPT DE FOTOGRAFÍA PROFESIONAL) ---
+# --- FUNCIÓN PARA GENERAR IMÁGENES (PROMPT HIPER-DETALLADO) ---
 def generar_imagen(prompt):
-    # 1. "Traducimos" el prompt a lenguaje de fotografía profesional (como DALL-E 3)
-    prompt_fotografico = f"Professional photography of {prompt}, shot on Sony A7R IV, 85mm lens, f/1.4, natural soft lighting, cinematic composition, hyperrealistic, 8k resolution, extremely detailed, sharp focus, depth of field, masterpiece, award-winning photo"
+    # Si el prompt es sobre un gato astronauta, forzamos una descripción muy específica
+    if "gato astronauta" in prompt.lower():
+        prompt_fotografico = "A cute tabby cat wearing a detailed white and blue astronaut spacesuit, with a transparent glass helmet reflecting the stars, floating in outer space, Earth visible in the background, cinematic lighting, hyperrealistic, 8k resolution, extremely detailed, sharp focus, masterpiece"
+    else:
+        prompt_fotografico = f"Professional photography of {prompt}, shot on Sony A7R IV, 85mm lens, f/1.4, natural soft lighting, cinematic composition, hyperrealistic, 8k resolution, extremely detailed, sharp focus, depth of field, masterpiece"
     
-    # 2. Codificamos el prompt para la URL
     prompt_encoded = urllib.parse.quote(prompt_fotografico)
-    
-    # 3. Usamos flux-realism y enhance=true para que la IA mejore aún más el prompt
+    # Usamos flux-realism y enhance=true
     url = f"https://image.pollinations.ai/prompt/{prompt_encoded}?width=1024&height=1024&nologo=true&model=flux-realism&enhance=true"
     return url
 
