@@ -41,30 +41,31 @@ cliente = Groq(api_key=GROQ_API_KEY)
 # CONFIGURACIÓN DE POLLINATIONS (IMÁGENES GRATIS)
 # ==========================================
 def generar_imagen(prompt):
-    # Usamos flux-realism para máxima calidad y enhance=true para que la IA mejore el prompt
     prompt_encoded = urllib.parse.quote(prompt)
     url = f"https://image.pollinations.ai/prompt/{prompt_encoded}?width=1024&height=1024&nologo=true&model=flux-realism&enhance=true"
     
-    # Intentamos hasta 3 veces si el servidor está saturado
-    for intento in range(3):
-        try:
+    try:
+        response = requests.get(url, timeout=60)
+        if response.status_code == 200:
+            b64_imagen = base64.b64encode(response.content).decode('utf-8')
+            return f"data:image/jpeg;base64,{b64_imagen}"
+        elif response.status_code == 402 or response.status_code == 429 or response.status_code == 503:
+            # Si nos da error de pago/límite, esperamos 45 segundos (el tiempo oficial) y reintentamos
+            print("Pollinations ocupado. Esperando 45 segundos...")
+            time.sleep(45)
             response = requests.get(url, timeout=60)
             if response.status_code == 200:
-                # Convertimos la imagen a base64 para mostrarla en el chat
                 b64_imagen = base64.b64encode(response.content).decode('utf-8')
                 return f"data:image/jpeg;base64,{b64_imagen}"
-            elif response.status_code == 429 or response.status_code == 503:
-                # Si está saturado, esperamos 3 segundos y reintentamos
-                time.sleep(3)
-                continue
             else:
-                print(f"Error de Pollinations: {response.status_code}")
+                print(f"Error tras esperar: {response.status_code}")
                 return None
-        except Exception as e:
-            print(f"Error generando imagen con Pollinations: {e}")
-            time.sleep(3)
-    
-    return None
+        else:
+            print(f"Error de Pollinations: {response.status_code}")
+            return None
+    except Exception as e:
+        print(f"Error generando imagen con Pollinations: {e}")
+        return None
 
 historiales = {}
 
