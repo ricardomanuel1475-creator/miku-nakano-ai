@@ -188,7 +188,7 @@ def responder():
     user_id = session['user_id']
     
     texto_lower = mensaje.lower()
-    if any(palabra in texto_lower for palabra in ["genera una imagen", "crea una imagen", "dibuja", "hazme una imagen", "haz una imagen", "genera", "crea", "dibujo", "imagen de"]):
+    if any(palabra in texto_lower for palabra in ["genera una imagen", "crea una imagen", "dibuja", "dibújame", "hazme una imagen", "haz una imagen", "hazme la imagen", "quiero una imagen", "imagen de", "genera", "crea", "dibujo"]):
         prompt = texto_lower.replace("miku", "").replace("genera una imagen", "").replace("crea una imagen", "").replace("dibuja", "").replace("hazme una imagen", "").replace("haz una imagen", "").strip()
         if prompt:
             url_imagen = generar_imagen(prompt)
