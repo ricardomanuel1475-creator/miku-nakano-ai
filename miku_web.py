@@ -64,7 +64,7 @@ cliente = Groq(api_key=GROQ_API_KEY)
 # CONFIGURACIÓN DE CLOUDFLARE
 # ==========================================
 
-CLOUDFLARE_ACCOUNT_ID = "b5cc836dcf39c9e98b583f5269357df"
+CLOUDFLARE_ACCOUNT_ID = "b5cc836dcfc39c9e98b583f5269357df"
 
 CLOUDFLARE_API_TOKEN = "cfut_YM63kUD6dnHKpkrBndUdmCk2tnjcAfeL1kG8EqEk70fc682b"
 
