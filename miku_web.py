@@ -37,52 +37,31 @@ GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "TU_CLAVE_AQUI")
 cliente = Groq(api_key=GROQ_API_KEY)
 
 # ==========================================
-# FUNCIÓN PARA MEJORAR EL PROMPT (CON OJOS Y PELAJE)
+# FUNCIÓN PARA GENERAR IMÁGENES CON REINTENTO
 # ==========================================
-def mejorar_prompt(prompt_usuario):
-    instrucciones = f"""
-    Eres un experto en "Prompt Engineering" para modelos de generación de imágenes.
-    El usuario ha pedido: "{prompt_usuario}"
+def generar_imagen(prompt):
+    prompt_encoded = urllib.parse.quote(prompt)
+    url = f"https://image.pollinations.ai/prompt/{prompt_encoded}?width=1024&height=1024&nologo=true&model=flux-realism&enhance=true"
     
-    Tu tarea es reescribir esta petición en un prompt en inglés, ultra-detallado, que respete EXACTAMENTE lo que el usuario pidió.
-    NO añadas elementos que el usuario no haya mencionado.
+    # Intentamos hasta 3 veces si el servidor está ocupado
+    for intento in range(3):
+        try:
+            response = requests.get(url, timeout=60)
+            if response.status_code == 200:
+                b64_imagen = base64.b64encode(response.content).decode('utf-8')
+                return f"data:image/jpeg;base64,{b64_imagen}"
+            elif response.status_code in [402, 429, 503]:
+                # Si está ocupado, esperamos 15 segundos y reintentamos
+                print(f"Pollinations ocupado. Esperando 15 segundos (intento {intento+1}/3)...")
+                time.sleep(15)
+            else:
+                print(f"Error de Pollinations: {response.status_code}")
+                return None
+        except Exception as e:
+            print(f"Error generando imagen: {e}")
+            time.sleep(15)
     
-    IMPORTANTE: Asegúrate de incluir estas palabras clave para evitar errores visuales:
-    - "perfect symmetric eyes, sharp focus on both eyes, detailed iris and pupil"
-    - "flawless fur texture, highly detailed hair"
-    - "professional photography, 8k resolution, hyperrealistic, masterpiece"
-    
-    Devuelve SOLO el prompt en inglés, sin explicaciones, listo para ser usado en una IA de imágenes.
-    """
-    
-    try:
-        completion = cliente.chat.completions.create(
-            model="openai/gpt-oss-120b",
-            messages=[{"role": "user", "content": instrucciones}],
-            temperature=0.7,
-            max_tokens=300
-        )
-        return completion.choices[0].message.content.strip()
-    except Exception as e:
-        print(f"Error mejorando prompt: {e}")
-        return f"Professional photography of {prompt_usuario}, perfect symmetric eyes, flawless fur texture, hyperrealistic, 8k, highly detailed, cinematic lighting, masterpiece"
-
-def generar_imagen(prompt_usuario):
-    prompt_maestro = mejorar_prompt(prompt_usuario)
-    prompt_encoded = urllib.parse.quote(prompt_maestro)
-    url = f"https://image.pollinations.ai/prompt/{prompt_encoded}?width=1024&height=1024&nologo=true&model=flux-realism"
-    
-    try:
-        response = requests.get(url, timeout=60)
-        if response.status_code == 200:
-            b64_imagen = base64.b64encode(response.content).decode('utf-8')
-            return f"data:image/jpeg;base64,{b64_imagen}"
-        else:
-            print(f"Error de Pollinations: {response.status_code}")
-            return None
-    except Exception as e:
-        print(f"Error generando imagen: {e}")
-        return None
+    return None
 
 historiales = {}
 
