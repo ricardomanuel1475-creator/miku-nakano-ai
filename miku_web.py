@@ -44,8 +44,9 @@ CLOUDFLARE_API_TOKEN = "cfut_CaYJ4rENMjEmJg0e5vQa1VrhAQ51UjN5mbMLJxkQf4b1a8a2"
 
 def generar_imagen(prompt):
     prompt_mejorado = f"Professional photography of {prompt}, shot on Sony A7R IV, 85mm lens, f/1.4, natural soft lighting, cinematic composition, hyperrealistic, 8k resolution, extremely detailed, sharp focus, depth of field, masterpiece"
-    model = "@cf/black-forest-labs/flux-1-schnell"
-    url = f"https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai/run/@cf/black-forest-labs/flux-2-klein-4b"
+    
+    # URL directa al modelo (sin variable intermedia para evitar errores)
+    url = f"https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai/run/@cf/black-forest-labs/flux-1-schnell"
     
     headers = {
         "Authorization": f"Bearer {CLOUDFLARE_API_TOKEN}",
@@ -55,6 +56,7 @@ def generar_imagen(prompt):
     payload = {"prompt": prompt_mejorado, "width": 1024, "height": 1024}
     
     try:
+        # Usamos json=payload (el formato que SÍ funciona con flux-1-schnell)
         response = requests.post(url, headers=headers, json=payload, timeout=60)
         response.raise_for_status()
         data = response.json()
@@ -189,7 +191,7 @@ def responder():
     
     texto_lower = mensaje.lower()
     if any(palabra in texto_lower for palabra in ["genera una imagen", "crea una imagen", "dibuja", "dibújame", "hazme una imagen", "haz una imagen", "hazme la imagen", "quiero una imagen", "imagen de", "genera", "crea", "dibujo"]):
-        prompt = texto_lower.replace("miku", "").replace("genera una imagen", "").replace("crea una imagen", "").replace("dibuja", "").replace("hazme una imagen", "").replace("haz una imagen", "").strip()
+        prompt = texto_lower.replace("miku", "").replace("genera una imagen", "").replace("crea una imagen", "").replace("dibuja", "").replace("dibújame", "").replace("hazme una imagen", "").replace("haz una imagen", "").replace("hazme la imagen", "").replace("quiero una imagen", "").replace("imagen de", "").strip()
         if prompt:
             url_imagen = generar_imagen(prompt)
             if url_imagen:
