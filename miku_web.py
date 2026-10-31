@@ -7,6 +7,7 @@ from authlib.integrations.flask_client import OAuth
 import uuid
 import requests
 import urllib.parse
+import base64
 
 app = Flask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1, x_prefix=1)
@@ -34,20 +35,35 @@ oauth.register(
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "TU_CLAVE_AQUI")
 cliente = Groq(api_key=GROQ_API_KEY)
 
-historiales = {}
+# ==========================================
+# CONFIGURACIÓN DE CLOUDFLARE (IMÁGENES)
+# ==========================================
+CLOUDFLARE_ACCOUNT_ID = "b5cc836dcf39c9e98b583f5269357df"
+CLOUDFLARE_API_TOKEN = "cfut_mFQBnq9S9yxbDVUUHCk5TDsRoGKHQ8Z9AgOT9HNjedada945"
 
-# --- FUNCIÓN PARA GENERAR IMÁGENES (PROMPT HIPER-DETALLADO) ---
 def generar_imagen(prompt):
-    # Si el prompt es sobre un gato astronauta, forzamos una descripción muy específica
-    if "gato astronauta" in prompt.lower():
-        prompt_fotografico = "A cute tabby cat wearing a detailed white and blue astronaut spacesuit, with a transparent glass helmet reflecting the stars, floating in outer space, Earth visible in the background, cinematic lighting, hyperrealistic, 8k resolution, extremely detailed, sharp focus, masterpiece"
-    else:
-        prompt_fotografico = f"Professional photography of {prompt}, shot on Sony A7R IV, 85mm lens, f/1.4, natural soft lighting, cinematic composition, hyperrealistic, 8k resolution, extremely detailed, sharp focus, depth of field, masterpiece"
+    prompt_mejorado = f"Professional photography of {prompt}, shot on Sony A7R IV, 85mm lens, f/1.4, natural soft lighting, cinematic composition, hyperrealistic, 8k resolution, extremely detailed, sharp focus, depth of field, masterpiece"
+    model = "@cf/black-forest-labs/flux-1-schnell"
+    url = f"https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai/run/{model}"
     
-    prompt_encoded = urllib.parse.quote(prompt_fotografico)
-    # Usamos flux-realism y enhance=true
-    url = f"https://image.pollinations.ai/prompt/{prompt_encoded}?width=1024&height=1024&nologo=true&model=flux-realism&enhance=true"
-    return url
+    headers = {
+        "Authorization": f"Bearer {CLOUDFLARE_API_TOKEN}",
+        "Content-Type": "application/json"
+    }
+    
+    payload = {"prompt": prompt_mejorado, "width": 1024, "height": 1024}
+    
+    try:
+        response = requests.post(url, headers=headers, json=payload, timeout=60)
+        response.raise_for_status()
+        data = response.json()
+        b64_imagen = data["result"]["image"]
+        return f"data:image/jpeg;base64,{b64_imagen}"
+    except Exception as e:
+        print(f"Error generando imagen con Cloudflare: {e}")
+        return None
+
+historiales = {}
 
 # --- LA INTERFAZ WEB (HTML/CSS) ---
 HTML = """
@@ -175,7 +191,10 @@ def responder():
         prompt = texto_lower.replace("miku", "").replace("genera una imagen", "").replace("crea una imagen", "").replace("dibuja", "").replace("hazme una imagen", "").replace("haz una imagen", "").strip()
         if prompt:
             url_imagen = generar_imagen(prompt)
-            return jsonify({"respuesta": f"[CREANDO]¡Claro! Dame un momento, estoy creando tu imagen... 🎨[IMAGEN]{url_imagen}[/IMAGEN]"})
+            if url_imagen:
+                return jsonify({"respuesta": f"[CREANDO]¡Claro! Dame un momento, estoy creando tu imagen... 🎨[IMAGEN]{url_imagen}[/IMAGEN]"})
+            else:
+                return jsonify({"respuesta": "Lo siento, tuve un problema al generar la imagen. Intenta de nuevo."})
 
     if user_id not in historiales:
         historiales[user_id] = [
