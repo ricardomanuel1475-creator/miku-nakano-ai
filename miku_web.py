@@ -8,7 +8,7 @@ import uuid
 import requests
 import urllib.parse
 import base64
-import time
+import json
 
 app = Flask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1, x_prefix=1)
@@ -37,31 +37,34 @@ GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "TU_CLAVE_AQUI")
 cliente = Groq(api_key=GROQ_API_KEY)
 
 # ==========================================
-# FUNCIÓN PARA GENERAR IMÁGENES CON REINTENTO
+# CONFIGURACIÓN DE CLOUDFLARE (IMÁGENES)
 # ==========================================
+CLOUDFLARE_ACCOUNT_ID = "b5cc836dcf39c9e98b583f5269357df"
+CLOUDFLARE_API_TOKEN = "cfut_CaYJ4rENMjEmJg0e5vQa1VrhAQ51UjN5mbMLJxkQf4b1a8a2"
+
 def generar_imagen(prompt):
-    prompt_encoded = urllib.parse.quote(prompt)
-    url = f"https://image.pollinations.ai/prompt/{prompt_encoded}?width=1024&height=1024&nologo=true&model=flux-realism&enhance=true"
+    # Usamos flux-1-schnell que SÍ acepta JSON
+    url = f"https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai/run/@cf/black-forest-labs/flux-1-schnell"
     
-    # Intentamos hasta 3 veces si el servidor está ocupado
-    for intento in range(3):
-        try:
-            response = requests.get(url, timeout=60)
-            if response.status_code == 200:
-                b64_imagen = base64.b64encode(response.content).decode('utf-8')
-                return f"data:image/jpeg;base64,{b64_imagen}"
-            elif response.status_code in [402, 429, 503]:
-                # Si está ocupado, esperamos 15 segundos y reintentamos
-                print(f"Pollinations ocupado. Esperando 15 segundos (intento {intento+1}/3)...")
-                time.sleep(15)
-            else:
-                print(f"Error de Pollinations: {response.status_code}")
-                return None
-        except Exception as e:
-            print(f"Error generando imagen: {e}")
-            time.sleep(15)
+    headers = {
+        "Authorization": f"Bearer {CLOUDFLARE_API_TOKEN}",
+        "Content-Type": "application/json"
+    }
     
-    return None
+    # Prompt detallado para forzar calidad y evitar errores en ojos/pelaje
+    prompt_maestro = f"Professional photography of {prompt}, perfect symmetric eyes, sharp focus on both eyes, detailed iris and pupil, flawless fur texture, hyperrealistic, 8k resolution, extremely detailed, cinematic lighting, masterpiece"
+    
+    payload = {"prompt": prompt_maestro}
+    
+    try:
+        response = requests.post(url, headers=headers, json=payload, timeout=60)
+        response.raise_for_status()
+        data = response.json()
+        b64_imagen = data["result"]["image"]
+        return f"data:image/jpeg;base64,{b64_imagen}"
+    except Exception as e:
+        print(f"Error generando imagen con Cloudflare: {e}")
+        return None
 
 historiales = {}
 
@@ -194,7 +197,7 @@ def responder():
             if url_imagen:
                 return jsonify({"respuesta": f"[CREANDO]¡Claro! Dame un momento, estoy creando tu imagen... 🎨[IMAGEN]{url_imagen}[/IMAGEN]"})
             else:
-                return jsonify({"respuesta": "Lo siento, el servidor de imágenes está ocupado. Intenta de nuevo en unos segundos."})
+                return jsonify({"respuesta": "Lo siento, tuve un problema al generar la imagen. Intenta de nuevo."})
 
     if user_id not in historiales:
         historiales[user_id] = [
