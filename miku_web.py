@@ -66,7 +66,7 @@ cliente = Groq(api_key=GROQ_API_KEY)
 
 CLOUDFLARE_ACCOUNT_ID = "b5cc836dcfc39c9e98b583f5269357df"
 
-CLOUDFLARE_API_TOKEN = "cfut_YM63kUD6dnHKpkrBndUdmCk2tnjcAfeL1kG8EqEk70fc682b"
+CLOUDFLARE_API_TOKEN = "cfut_MlI6z8COp7EtGYfFui6MbNxQN2hj7wnzGoZXMORwd779d413"
 
 MODELO_IMAGEN = "@cf/black-forest-labs/flux-1-schnell"
 
