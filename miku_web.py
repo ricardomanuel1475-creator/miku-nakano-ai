@@ -39,8 +39,8 @@ cliente = Groq(api_key=GROQ_API_KEY)
 # ==========================================
 # CONFIGURACIÓN DE CLOUDFLARE (IMÁGENES)
 # ==========================================
-CLOUDFLARE_ACCOUNT_ID = b5cc836dcfc39c9e98b583f5269357df""
-CLOUDFLARE_API_TOKEN = "cfut_CaYJ4rENMjEmJgOe5vQa1VrhAQ51UjN5mbMLJxKQf4b1a8a2"
+CLOUDFLARE_ACCOUNT_ID = "b5cc836dcf39c9e98b583f5269357df"
+CLOUDFLARE_API_TOKEN = "cfut_CaYJ4rENMjEmJg0e5vQa1VrhAQ51UjN5mbMLJxkQf4b1a8a2"
 
 def generar_imagen(prompt):
     prompt_mejorado = f"Professional photography of {prompt}, shot on Sony A7R IV, 85mm lens, f/1.4, natural soft lighting, cinematic composition, hyperrealistic, 8k resolution, extremely detailed, sharp focus, depth of field, masterpiece"
