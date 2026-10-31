@@ -8,7 +8,6 @@ import uuid
 import requests
 import urllib.parse
 import base64
-import json
 import time
 
 app = Flask(__name__)
@@ -38,33 +37,33 @@ GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "TU_CLAVE_AQUI")
 cliente = Groq(api_key=GROQ_API_KEY)
 
 # ==========================================
-# CONFIGURACIÓN DE POLLINATIONS (IMÁGENES GRATIS)
+# CONFIGURACIÓN DE POLLINATIONS (IMÁGENES)
 # ==========================================
 def generar_imagen(prompt):
-    prompt_encoded = urllib.parse.quote(prompt)
-    url = f"https://image.pollinations.ai/prompt/{prompt_encoded}?width=1024&height=1024&nologo=true&model=flux-realism&enhance=true"
+    # PROMPT DE CALIDAD EXTREMA (como lo haría un fotógrafo profesional)
+    prompt_maestro = (
+        f"A hyper-realistic, award-winning photograph of {prompt}. "
+        "Shot on a full-frame DSLR camera, 85mm prime lens, aperture f/1.2 for a shallow depth of field. "
+        "The subject is perfectly in focus, with razor-sharp details on the fur and eyes. "
+        "Cinematic lighting, soft rim light, and a subtle lens flare. "
+        "The background is a stunning view of Earth from space, with deep blue oceans and swirling white clouds. "
+        "Ultra-detailed, 8K resolution, photorealistic, masterpiece, trending on ArtStation."
+    )
+    
+    prompt_encoded = urllib.parse.quote(prompt_maestro)
+    # Usamos flux-realism que es el modelo más realista de Pollinations
+    url = f"https://image.pollinations.ai/prompt/{prompt_encoded}?width=1024&height=1024&nologo=true&model=flux-realism"
     
     try:
         response = requests.get(url, timeout=60)
         if response.status_code == 200:
             b64_imagen = base64.b64encode(response.content).decode('utf-8')
             return f"data:image/jpeg;base64,{b64_imagen}"
-        elif response.status_code == 402 or response.status_code == 429 or response.status_code == 503:
-            # Si nos da error de pago/límite, esperamos 45 segundos (el tiempo oficial) y reintentamos
-            print("Pollinations ocupado. Esperando 45 segundos...")
-            time.sleep(45)
-            response = requests.get(url, timeout=60)
-            if response.status_code == 200:
-                b64_imagen = base64.b64encode(response.content).decode('utf-8')
-                return f"data:image/jpeg;base64,{b64_imagen}"
-            else:
-                print(f"Error tras esperar: {response.status_code}")
-                return None
         else:
             print(f"Error de Pollinations: {response.status_code}")
             return None
     except Exception as e:
-        print(f"Error generando imagen con Pollinations: {e}")
+        print(f"Error generando imagen: {e}")
         return None
 
 historiales = {}
@@ -134,7 +133,7 @@ HTML = """
             chat.scrollTop = chat.scrollHeight;
 
             const idPensando = 'pensando-' + Date.now();
-            chat.innerHTML += `<div class="mensaje mensaje-miku" id="${idPensando}"><b>Miku:</b> Pensando... 💭</div>`;
+            chat.innerHTML += `<div class="mensaje mensaje-miku" id="${idPensando}"><b>Miku:</b> Creando imagen... 🎨</div>`;
             chat.scrollTop = chat.scrollHeight;
 
             const response = await fetch('/responder', {
@@ -198,7 +197,7 @@ def responder():
             if url_imagen:
                 return jsonify({"respuesta": f"[CREANDO]¡Claro! Dame un momento, estoy creando tu imagen... 🎨[IMAGEN]{url_imagen}[/IMAGEN]"})
             else:
-                return jsonify({"respuesta": "Lo siento, el servidor de imágenes está muy ocupado. Intenta de nuevo en unos segundos."})
+                return jsonify({"respuesta": "Lo siento, el servidor de imágenes está ocupado. Intenta de nuevo en unos segundos."})
 
     if user_id not in historiales:
         historiales[user_id] = [
