@@ -39,8 +39,8 @@ cliente = Groq(api_key=GROQ_API_KEY)
 # ==========================================
 # CONFIGURACIÓN DE CLOUDFLARE (IMÁGENES)
 # ==========================================
-CLOUDFLARE_ACCOUNT_ID = "b5cc836dcf39c9e98b583f5269357df"
-CLOUDFLARE_API_TOKEN = "cfut_mFQ8nq9S9yxbDVUUHCk5TDsRoGKHO8Z9AgOT9HNJedadа945"
+CLOUDFLARE_ACCOUNT_ID = b5cc836dcfc39c9e98b583f5269357df""
+CLOUDFLARE_API_TOKEN = "cfut_CaYJ4rENMjEmJgOe5vQa1VrhAQ51UjN5mbMLJxKQf4b1a8a2"
 
 def generar_imagen(prompt):
     prompt_mejorado = f"Professional photography of {prompt}, shot on Sony A7R IV, 85mm lens, f/1.4, natural soft lighting, cinematic composition, hyperrealistic, 8k resolution, extremely detailed, sharp focus, depth of field, masterpiece"
@@ -55,7 +55,7 @@ def generar_imagen(prompt):
     payload = {"prompt": prompt_mejorado, "width": 1024, "height": 1024}
     
     try:
-        response = requests.post(url, headers=headers, data=json.dumps(payload, ensure_ascii=False).encode('utf-8'), timeout=60)
+        response = requests.post(url, headers=headers, json=payload, timeout=60)
         response.raise_for_status()
         data = response.json()
         b64_imagen = data["result"]["image"]
