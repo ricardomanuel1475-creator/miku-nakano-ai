@@ -36,15 +36,16 @@ cliente = Groq(api_key=GROQ_API_KEY)
 
 historiales = {}
 
-# --- FUNCIÓN PARA GENERAR IMÁGENES (MEJORADA) ---
+# --- FUNCIÓN PARA GENERAR IMÁGENES (PROMPT DE FOTOGRAFÍA PROFESIONAL) ---
 def generar_imagen(prompt):
-    # Prompt detallado con lenguaje técnico de fotografía
-    prompt_mejorado = f"Professional photography of {prompt}, shot on Sony A7IV, 50mm lens, f/1.8, natural lighting, cinematic composition, hyperrealistic, 8k resolution, extremely detailed, sharp focus, masterpiece"
+    # 1. "Traducimos" el prompt a lenguaje de fotografía profesional (como DALL-E 3)
+    prompt_fotografico = f"Professional photography of {prompt}, shot on Sony A7R IV, 85mm lens, f/1.4, natural soft lighting, cinematic composition, hyperrealistic, 8k resolution, extremely detailed, sharp focus, depth of field, masterpiece, award-winning photo"
     
-    prompt_encoded = urllib.parse.quote(prompt_mejorado)
+    # 2. Codificamos el prompt para la URL
+    prompt_encoded = urllib.parse.quote(prompt_fotografico)
     
-    # Usamos flux-realism y activamos enhance=true para que la IA expanda el prompt
-    url = f"https://image.pollinations.ai/prompt/{prompt_encoded}?width=768&height=768&nologo=true&model=flux-realism&enhance=true"
+    # 3. Usamos flux-realism y enhance=true para que la IA mejore aún más el prompt
+    url = f"https://image.pollinations.ai/prompt/{prompt_encoded}?width=1024&height=1024&nologo=true&model=flux-realism&enhance=true"
     return url
 
 # --- LA INTERFAZ WEB (HTML/CSS) ---
@@ -124,15 +125,10 @@ HTML = """
             
             let respuestaFormateada = data.respuesta;
             
-            // Si la respuesta contiene una imagen
             if (respuestaFormateada.includes("[IMAGEN]")) {
                 const url = respuestaFormateada.split("[IMAGEN]")[1].split("[/IMAGEN]")[0];
                 let texto = respuestaFormateada.split("[IMAGEN]")[0];
-                
-                // Limpiamos la etiqueta [CREANDO]
                 texto = texto.replace("[CREANDO]", "");
-                
-                // Mostramos el texto y luego la imagen
                 document.getElementById(idPensando).innerHTML = `<b>Miku:</b> ${texto}<br><img src="${url}" style="max-width: 100%; border-radius: 10px; margin-top: 10px;">`;
             } else {
                 document.getElementById(idPensando).innerHTML = `<b>Miku:</b> ${respuestaFormateada}`;
@@ -173,7 +169,6 @@ def responder():
     mensaje = data.get('mensaje')
     user_id = session['user_id']
     
-    # --- DETECCIÓN DE GENERACIÓN DE IMAGEN ---
     texto_lower = mensaje.lower()
     if any(palabra in texto_lower for palabra in ["genera una imagen", "crea una imagen", "dibuja", "hazme una imagen", "haz una imagen", "genera", "crea", "dibujo", "imagen de"]):
         prompt = texto_lower.replace("miku", "").replace("genera una imagen", "").replace("crea una imagen", "").replace("dibuja", "").replace("hazme una imagen", "").replace("haz una imagen", "").strip()
@@ -181,7 +176,6 @@ def responder():
             url_imagen = generar_imagen(prompt)
             return jsonify({"respuesta": f"[CREANDO]¡Claro! Dame un momento, estoy creando tu imagen... 🎨[IMAGEN]{url_imagen}[/IMAGEN]"})
 
-    # --- LÓGICA DE CHAT NORMAL Y BÚSQUEDA ---
     if user_id not in historiales:
         historiales[user_id] = [
             {"role": "system", "content": "Eres Miku Nakano. Tu personalidad es dulce, cálida, amable y un poco tímida. IMPORTANTE: No uses apelativos como 'Director' ni 'Tú' a menos que te lo pidan. Responde en español de forma concisa y cariñosa."}
