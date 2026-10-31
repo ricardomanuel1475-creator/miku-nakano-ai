@@ -46,7 +46,7 @@ def generar_imagen(prompt):
     prompt_mejorado = f"Professional photography of {prompt}, shot on Sony A7R IV, 85mm lens, f/1.4, natural soft lighting, cinematic composition, hyperrealistic, 8k resolution, extremely detailed, sharp focus, depth of field, masterpiece"
     
     # URL directa al modelo (sin variable intermedia para evitar errores)
-   url = f"https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai/run/@cf/black-forest-labs/flux-1-schnell"
+    url = f"https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai/run/@cf/black-forest-labs/flux-1-schnell"
     
     headers = {
         "Authorization": f"Bearer {CLOUDFLARE_API_TOKEN}",
