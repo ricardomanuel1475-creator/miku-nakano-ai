@@ -47,9 +47,9 @@ def limpiar_texto(texto):
     return texto.strip()
 
 # ==========================================
-# FUNCIÓN PARA BUSCAR IMÁGENES EN WIKIMEDIA COMMONS
+# FUNCIÓN PARA BUSCAR IMÁGENES EN WIKIMEDIA COMMONS (CON FILTRO)
 # ==========================================
-def buscar_imagen_wikimedia(palabras_clave, limite=2):
+def buscar_imagen_wikimedia(palabras_clave, limite=5):
     try:
         url = "https://commons.wikimedia.org/w/api.php"
         headers = {
@@ -60,10 +60,10 @@ def buscar_imagen_wikimedia(palabras_clave, limite=2):
             "generator": "search",
             "gsrsearch": palabras_clave,
             "gsrnamespace": "6",
-            "gsrlimit": limite,
+            "gsrlimit": limite, # Pedimos más opciones por si la primera es basura
             "prop": "imageinfo",
             "iiprop": "url|extmetadata",
-            "iiurlwidth": "800", # Pedimos a Wikimedia que nos de la imagen a 800px de ancho
+            "iiurlwidth": "800",
             "format": "json"
         }
         
@@ -73,27 +73,36 @@ def buscar_imagen_wikimedia(palabras_clave, limite=2):
             data = response.json()
             paginas = data.get("query", {}).get("pages", {})
             
-            imagenes_encontradas = []
+            imagenes_validas = []
             for page_id, pagina in paginas.items():
-                titulo_archivo = pagina.get("title", "")
-                nombre_limpio = titulo_archivo.replace("File:", "").rsplit('.', 1)[0].replace('_', ' ')
+                titulo_archivo = pagina.get("title", "").lower()
+                nombre_limpio = titulo_archivo.replace("file:", "").rsplit('.', 1)[0].replace('_', ' ')
                 
                 info = pagina.get("imageinfo", [{}])[0]
                 url_imagen = info.get("thumburl") or info.get("url")
                 
-                if url_imagen and not url_imagen.lower().endswith(('.svg', '.tiff')):
+                if not url_imagen: continue
+
+                # FILTRO ANTI-BASURA: Rechazar si es SVG, TIFF, si es de Google Books o tiene pinta de libro
+                es_basura = any(x in url_imagen.lower() or x in titulo_archivo for x in ["google books", "google_books", "book cover", "portada", "scan"])
+                es_formato_valido = url_imagen.lower().endswith(('.jpg', '.jpeg', '.png'))
+
+                if es_formato_valido and not es_basura:
                     metadatos = info.get("extmetadata", {})
                     licencia = metadatos.get("LicenseShortName", {}).get("value", "Ver en Commons")
                     autor = metadatos.get("Artist", {}).get("value", "Desconocido")
                     autor = re.sub(r'<[^>]+>', '', autor)
                     
-                    imagenes_encontradas.append({
+                    imagenes_validas.append({
                         "url": url_imagen,
                         "nombre": nombre_limpio,
                         "autor": autor.strip(),
                         "licencia": licencia.strip()
                     })
-            return imagenes_encontradas
+            
+            # Devolvemos solo las que pasaron el filtro
+            return imagenes_validas
+            
         return []
     except Exception as e:
         print(f"Error buscando imagen en Wikimedia Commons: {e}")
@@ -119,48 +128,15 @@ HTML = """
         .user-info { font-size: 0.9rem; color: #666; }
         #chat { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 15px; }
         
-        /* Ajustes para los mensajes */
         .mensaje { max-width: 85%; padding: 12px 16px; border-radius: 15px; line-height: 1.5; font-size: 0.95rem; white-space: pre-wrap; }
         .mensaje-usuario { align-self: flex-end; background: #4aa3df; color: white; border-bottom-right-radius: 2px; }
-        
-        /* EL MENSAJE DE MIKU AHORA PUEDE CRECER MÁS PARA DAR ESPACIO A LA IMAGEN */
-        .mensaje-miku { 
-            align-self: flex-start; 
-            background: #f0f7ff; 
-            color: #1b3a4b; 
-            border-bottom-left-radius: 2px; 
-            border: 1px solid #dff5ff; 
-            width: auto; /* Deja que crezca según el contenido */
-            max-width: 90%; /* Límite para que no toque los bordes de la pantalla */
-            min-width: 250px;
-        }
+        .mensaje-miku { align-self: flex-start; background: #f0f7ff; color: #1b3a4b; border-bottom-left-radius: 2px; border: 1px solid #dff5ff; width: auto; max-width: 90%; min-width: 250px; }
         .mensaje-miku b { color: #2a6f97; }
         
-        /* Ajustes para que la tarjeta de la imagen ocupe todo el espacio disponible */
-        .tarjeta-imagen { 
-            background: #fff; 
-            border-radius: 8px; 
-            padding: 10px; 
-            margin: 15px 0; 
-            border: 1px solid #e0e0e0; 
-            box-shadow: 0 2px 5px rgba(0,0,0,0.05); 
-            width: 100%; /* Ocupa todo el ancho del mensaje */
-            display: block;
-        }
+        .tarjeta-imagen { background: #fff; border-radius: 8px; padding: 10px; margin: 15px 0; border: 1px solid #e0e0e0; box-shadow: 0 2px 5px rgba(0,0,0,0.05); width: 100%; display: block; }
         .titulo-imagen { font-weight: bold; color: #2a6f97; font-size: 0.9rem; margin-bottom: 8px; text-transform: capitalize; }
         
-        .tarjeta-imagen img { 
-            display: block; 
-            width: 100%; /* Ocupa todo el ancho de la tarjeta */
-            height: auto; 
-            max-height: 600px; /* Aumentamos el límite de altura */
-            object-fit: contain; 
-            background-color: #f8f9fa; 
-            border-radius: 5px; 
-            margin: 0 auto; 
-            border: 1px solid #eee;
-        }
-        
+        .tarjeta-imagen img { display: block; width: 100%; height: auto; max-height: 600px; object-fit: contain; background-color: #f8f9fa; border-radius: 5px; margin: 0 auto; border: 1px solid #eee; }
         .atribucion { font-size: 0.75rem; color: #666; margin-top: 8px; font-style: italic; border-top: 1px solid #eee; padding-top: 5px; }
         
         .input-area { padding: 15px; padding-bottom: 25px; border-top: 1px solid #eee; display: flex; gap: 10px; background: #fafafa; }
@@ -276,14 +252,16 @@ def responder():
                 historial_chat.append({"role": "system", "content": f"Info de internet: {info_web}"})
             except: pass
 
+    # PROMPT MEJORADO: Obligamos a que si es un personaje, la primera foto sea su retrato
     instruccion_imagenes = (
         "IMPORTANTE: Para hacer tu respuesta más visual, añade etiquetas secretas con imágenes. "
         "El formato exacto es: [IMG: palabras clave en inglés]. "
-        "CRÍTICO: Usa palabras clave MUY ESPECÍFICAS y en inglés (mínimo 3 palabras). "
-        "No uses palabras genéricas como 'war', 'history' o 'people'. "
-        "Ejemplo correcto: [IMG: World War II Normandy landings tanks]. "
-        "Ejemplo incorrecto: [IMG: war]. "
-        "Usa máximo 2 imágenes por respuesta, colocadas justo después del párrafo al que se refieren."
+        "CRÍTICO 1: Usa palabras clave MUY ESPECÍFICAS en inglés (mínimo 3 palabras). "
+        "CRÍTICO 2: Si el tema principal de la consulta es un PERSONAJE HISTÓRICO o PERSONA FAMOSA, "
+        "la PRIMERA etiqueta de imagen DEBE SER OBLIGATORIAMENTE su nombre seguido de la palabra 'portrait' o 'face'. "
+        "Ejemplo: [IMG: Francisco Pizarro portrait]. "
+        "CRÍTICO 3: No uses palabras genéricas como 'war', 'history' o 'people'. "
+        "Usa máximo 2 imágenes por respuesta."
     )
     historial_chat.append({"role": "system", "content": instruccion_imagenes})
     historial_chat.append({"role": "user", "content": mensaje})
@@ -306,9 +284,11 @@ def responder():
                 respuesta_final += limpiar_texto(parte) + "\n"
             else:
                 palabras_clave = parte.strip()
-                imagenes = buscar_imagen_wikimedia(palabras_clave, limite=1)
+                # Buscamos hasta 5 opciones para tener de donde escoger
+                imagenes = buscar_imagen_wikimedia(palabras_clave, limite=5)
                 
                 if imagenes:
+                    # Tomamos la primera imagen que sobrevivió al filtro anti-basura
                     img = imagenes[0]
                     tarjeta = f'''
                     <div class="tarjeta-imagen">
