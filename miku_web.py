@@ -35,7 +35,7 @@ GROQ_API_KEY = "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"
 cliente = Groq(api_key=GROQ_API_KEY)
 
 # ==========================================
-# FUNCIÓN PARA BUSCAR IMÁGENES
+# FUNCIÓN PARA BUSCAR IMÁGENES RELACIONADAS
 # ==========================================
 def buscar_imagen(tema):
     try:
@@ -195,6 +195,7 @@ def responder():
         ]
     
     historial_chat = historiales[user_id]
+    query = ""  # Inicializamos la variable para evitar errores
     
     # --- BÚSQUEDA EN INTERNET SI ES UNA INVESTIGACIÓN ---
     if "busca" in texto_lower or "investiga" in texto_lower:
@@ -218,10 +219,12 @@ def responder():
         respuesta = completion.choices[0].message.content
         historial_chat.append({"role": "assistant", "content": respuesta})
         
-        # --- SI ES UNA INVESTIGACIÓN, BUSCAMOS UNA IMAGEN ---
+        # --- SI ES UNA INVESTIGACIÓN O RESUMEN, BUSCAMOS UNA IMAGEN ---
         imagen_url = None
         if "investiga" in texto_lower or "resumen" in texto_lower or "tarea" in texto_lower:
-            imagen_url = buscar_imagen(query if query else mensaje)
+            # Usamos el query si existe, si no, usamos el mensaje original
+            tema_busqueda = query if query else mensaje
+            imagen_url = buscar_imagen(tema_busqueda)
         
         return jsonify({"respuesta": respuesta, "imagen": imagen_url})
     except Exception as e:
