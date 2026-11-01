@@ -40,7 +40,7 @@ cliente = Groq(api_key=GROQ_API_KEY)
 # ==========================================
 def buscar_imagen(tema):
     try:
-        # Le pedimos a Groq que extraiga el tema principal en inglés
+        # Extraemos las palabras clave en inglés
         instrucciones = f"Extract the main topic of this research in English, just 3 or 4 keywords, no explanations. Research: '{tema}'"
         completion = cliente.chat.completions.create(
             model="openai/gpt-oss-120b",
@@ -50,7 +50,7 @@ def buscar_imagen(tema):
         )
         palabras_clave = completion.choices[0].message.content.strip().replace('"', '')
         
-        # Reintentamos hasta 3 veces si DuckDuckGo falla
+        # Buscamos la imagen con reintentos
         for intento in range(3):
             try:
                 resultados = DDGS().images(
@@ -150,8 +150,9 @@ HTML = """
             
             let respuestaFormateada = data.respuesta;
             
+            // Si hay imagen, la ponemos al principio del mensaje
             if (data.imagen) {
-                respuestaFormateada += `<br><br><a href="${data.imagen}" target="_blank">📸 Ver imagen relacionada</a><br><img src="${data.imagen}" style="max-width: 100%; border-radius: 10px; margin-top: 10px;">`;
+                respuestaFormateada = `<img src="${data.imagen}" style="max-width: 100%; border-radius: 10px; margin-bottom: 10px;"><br>` + respuestaFormateada;
             }
             
             document.getElementById(idPensando).innerHTML = `<b>Miku:</b> ${respuestaFormateada}`;
@@ -193,14 +194,16 @@ def responder():
     
     texto_lower = mensaje.lower()
     
+    # --- CONVERSACIÓN CON GROQ ---
     if user_id not in historiales:
         historiales[user_id] = [
-            {"role": "system", "content": "Eres Miku Nakano. Tu personalidad es dulce, cálida, amable y un poco tímida. Responde en español de forma clara y útil. Cuando te pidan una investigación o resumen, sé muy detallada y estructurada, como un buen profesor."}
+            {"role": "system", "content": "Eres Miku Nakano. Tu personalidad es dulce, cálida, amable y un poco tímida. Responde en español de forma clara y útil. Cuando te pidan una investigación o resumen, sé muy detallada y estructurada. IMPORTANTE: No uses tablas, asteriscos (**) ni símbolos raros. Usa solo texto plano con guiones simples (-) para las listas."}
         ]
     
     historial_chat = historiales[user_id]
     query = ""
     
+    # --- BÚSQUEDA EN INTERNET SI ES UNA INVESTIGACIÓN ---
     if "busca" in texto_lower or "investiga" in texto_lower or "resumen" in texto_lower:
         query = texto_lower.replace("miku", "").replace("busca", "").replace("investiga", "").replace("resumen", "").replace("hazme", "").replace("de", "").strip()
         if query:
@@ -217,14 +220,14 @@ def responder():
             model="openai/gpt-oss-120b",
             messages=historial_chat,
             temperature=0.7,
-            max_tokens=4000  # Aumentado para investigaciones largas
+            max_tokens=4000
         )
         respuesta = completion.choices[0].message.content
         historial_chat.append({"role": "assistant", "content": respuesta})
         
         # --- BUSCAR IMAGEN SI ES UNA INVESTIGACIÓN O RESUMEN ---
         imagen_url = None
-        if "investiga" in texto_lower or "resumen" in texto_lower or "tarea" in texto_lower:
+        if "investiga" in texto_lower or "resumen" in texto_lower or "tarea" in texto_lower or "busca" in texto_lower:
             tema_busqueda = query if query else mensaje
             imagen_url = buscar_imagen(tema_busqueda)
         
