@@ -49,12 +49,21 @@ def limpiar_texto(texto):
 # ==========================================
 # FUNCIÓN PARA BUSCAR IMÁGENES EN WIKIMEDIA COMMONS
 # ==========================================
-def buscar_imagen_wikimedia(palabras_clave, limite=10, es_mapa=False):
+def buscar_imagen_wikimedia(palabras_clave, limite=10, buscar_mapa=False):
     try:
+        # Limpiamos la búsqueda para que no tenga comillas o símbolos raros
+        palabras_clave = re.sub(r'[^\w\s]', '', palabras_clave).strip()
+        if not palabras_clave: return []
+
         url = "https://commons.wikimedia.org/w/api.php"
         headers = {
             "User-Agent": "MikuNakanoAI/1.0 (https://miku-nakano-ai.onrender.com; contacto@ejemplo.com)"
         }
+        
+        # Si buscamos mapa, forzamos la palabra "map" en inglés
+        if buscar_mapa and "map" not in palabras_clave.lower():
+            palabras_clave += " map"
+
         params = {
             "action": "query",
             "generator": "search",
@@ -87,11 +96,9 @@ def buscar_imagen_wikimedia(palabras_clave, limite=10, es_mapa=False):
                 es_formato_valido = url_imagen.lower().endswith(('.jpg', '.jpeg', '.png'))
                 es_alta_resolucion = ancho_original >= 500 
                 
-                # Si estamos buscando un mapa, no descartamos por la palabra "map". Si no, filtramos basura.
-                if es_mapa:
-                    es_basura = any(p in titulo_archivo for p in ["book", "document", "scan", "text", "cover", "signature"])
-                else:
-                    es_basura = any(p in titulo_archivo for p in ["book", "document", "scan", "text", "cover", "signature", "graph", "chart", "logo"])
+                # Filtros: Si es mapa, permitimos mapas. Si no, bloqueamos libros.
+                palabras_basura = ["book", "document", "scan", "text", "cover", "signature", "graph", "chart"]
+                es_basura = any(palabra in titulo_archivo for palabra in palabras_basura)
 
                 if es_formato_valido and es_alta_resolucion and not es_basura:
                     metadatos = info.get("extmetadata", {})
@@ -191,7 +198,7 @@ HTML = """
             chat.scrollTop = chat.scrollHeight;
 
             const idPensando = 'pensando-' + Date.now();
-            chat.innerHTML += `<div class="mensaje mensaje-miku" id="${idPensando}"><b>Miku:</b> Preparando una investigación completa con 3 imágenes... 🔍</div>`;
+            chat.innerHTML += `<div class="mensaje mensaje-miku" id="${idPensando}"><b>Miku:</b> Investigando y preparando 3 imágenes HD... 🔍</div>`;
             chat.scrollTop = chat.scrollHeight;
 
             const response = await fetch('/responder', {
@@ -242,16 +249,18 @@ def responder():
     
     if user_id not in historiales:
         historiales[user_id] = [
-            {"role": "system", "content": "Eres Miku Nakano. Tu personalidad es dulce, cálida, amable y un poco tímida. Responde en español de forma clara y útil. Cuando te pidan una investigación o resumen, sé muy detallada y estructurada. Usa texto plano y viñetas simples. NO incluyas etiquetas de imágenes en tu texto."}
+            {"role": "system", "content": "Eres Miku Nakano. Tu personalidad es dulce, cálida, amable y un poco tímida. Responde en español de forma clara y útil. Cuando te pidan una investigación o resumen, sé muy detallada y estructurada. Usa texto plano y viñetas simples."}
         ]
     
     historial_chat = historiales[user_id]
     query = ""
     es_investigacion = False
     
-    if "busca" in texto_lower or "investiga" in texto_lower or "resumen" in texto_lower or "quien" in texto_lower or "qué" in texto_lower:
+    if "busca" in texto_lower or "investiga" in texto_lower or "resumen" in texto_lower or "quien" in texto_lower or "qué" in texto_lower or "historia" in texto_lower:
         es_investigacion = True
+        # Limpiamos la frase del usuario para sacar el tema principal
         query = texto_lower.replace("miku", "").replace("busca", "").replace("investiga", "").replace("resumen", "").replace("hazme", "").replace("de", "").replace("sobre", "").replace("la", "").replace("el", "").replace("quien", "").replace("era", "").replace("qué", "").replace("es", "").strip()
+        
         if query:
             try:
                 resultados = DDGS().text(query, max_results=3)
@@ -259,6 +268,16 @@ def responder():
                 historial_chat.append({"role": "system", "content": f"Info de internet: {info_web}"})
             except: pass
 
+    # LE PEDIMOS A LA IA QUE NOS DÉ LAS PALABRAS CLAVE EN INGLÉS PARA LAS IMÁGENES
+    instruccion_imagenes = (
+        "Para completar tu respuesta, añade al final tres etiquetas secretas con palabras clave en inglés. "
+        "El formato exacto es: [IMG: palabra clave]. "
+        "La primera DEBE ser el nombre del personaje o tema principal + 'portrait' (ej: [IMG: Christopher Columbus portrait]). "
+        "La segunda DEBE ser sobre un mapa del tema (ej: [IMG: map of the Americas 1492]). "
+        "La tercera DEBE ser una foto del contexto o lugar (ej: [IMG: Caribbean islands landscape]). "
+        "NO escribas nada más después de estas etiquetas."
+    )
+    historial_chat.append({"role": "system", "content": instruccion_imagenes})
     historial_chat.append({"role": "user", "content": mensaje})
     
     try:
@@ -268,61 +287,57 @@ def responder():
             temperature=0.7,
             max_tokens=4000
         )
-        texto_ia = completion.choices[0].message.content
-        texto_limpio = limpiar_texto(texto_ia)
+        respuesta_cruda = completion.choices[0].message.content
+        
+        # Extraemos las palabras clave que la IA puso en las etiquetas [IMG: ...]
+        etiquetas_ia = re.findall(r'\[IMG:\s*(.*?)\]', respuesta_cruda)
+        
+        # Limpiamos el texto quitando las etiquetas para que no se vean feas
+        texto_limpio = re.sub(r'\[IMG:\s*(.*?)\]', '', respuesta_cruda)
+        texto_limpio = limpiar_texto(texto_limpio)
         
         # --- INYECCIÓN FORZADA DE 3 IMÁGENES ---
         imagenes_a_insertar = []
-        
-        if es_investigacion and query:
-            tema_principal = query.strip()
-            
-            # 1. BÚSQUEDA 1: El protagonista / tema principal (Retrato o foto)
-            img_1 = buscar_imagen_wikimedia(tema_principal, limite=5)
-            if img_1:
-                imagenes_a_insertar.append(img_1[0])
-            
-            # 2. BÚSQUEDA 2: El Mapa (Forzado)
-            mapa_query = f"{tema_principal} map"
-            img_2 = buscar_imagen_wikimedia(mapa_query, limite=5, es_mapa=True)
-            if img_2:
-                # Evitar duplicados
-                if not any(img['url'] == img_2[0]['url'] for img in imagenes_a_insertar):
-                    imagenes_a_insertar.append(img_2[0])
-            else:
-                # Plan B si no hay mapa: buscar una foto del lugar/evento
-                img_2_plan_b = buscar_imagen_wikimedia(f"{tema_principal} location", limite=5)
-                if img_2_plan_b and not any(img['url'] == img_2_plan_b[0]['url'] for img in imagenes_a_insertar):
-                    imagenes_a_insertar.append(img_2_plan_b[0])
+        palabras_usadas = []
 
-            # 3. BÚSQUEDA 3: Contexto o foto secundaria (Forzado)
-            # Buscamos algo relacionado con el tema pero diferente
-            contexto_query = f"{tema_principal} history"
-            img_3 = buscar_imagen_wikimedia(contexto_query, limite=10)
-            if img_3:
-                for img in img_3:
-                    if not any(existente['url'] == img['url'] for existente in imagenes_a_insertar):
-                        imagenes_a_insertar.append(img)
-                        break # Solo queremos 1 más
-                        
-            # Si aún faltan imágenes, rellenamos con búsquedas genéricas del tema
-            while len(imagenes_a_insertar) < 3:
-                relleno = buscar_imagen_wikimedia(f"{tema_principal} photography", limite=5)
-                agregado = False
-                if relleno:
-                    for img in relleno:
-                        if not any(existente['url'] == img['url'] for existente in imagenes_a_insertar):
-                            imagenes_a_insertar.append(img)
-                            agregado = True
+        # 1. Si la IA nos dio palabras clave, las usamos
+        if etiquetas_ia:
+            for etiqueta in etiquetas_ia:
+                if len(imagenes_a_insertar) >= 3: break
+                img = buscar_imagen_wikimedia(etiqueta.strip(), limite=5)
+                if img:
+                    for i in img:
+                        if not any(e['url'] == i['url'] for e in imagenes_a_insertar):
+                            imagenes_a_insertar.append(i)
+                            palabras_usadas.append(etiqueta.strip())
                             break
-                if not agregado:
-                    break # Si no encuentra más, se detiene para no hacer loop infinito
+
+        # 2. Plan B: Si no llegamos a 3 imágenes, forzamos la búsqueda con la query del usuario
+        if len(imagenes_a_insertar) < 3 and query:
+            # Retrato / Tema principal
+            img1 = buscar_imagen_wikimedia(f"{query} portrait", limite=5)
+            if img1 and not any(e['url'] == img1[0]['url'] for e in imagenes_a_insertar):
+                imagenes_a_insertar.append(img1[0])
+            
+            # Mapa
+            if len(imagenes_a_insertar) < 3:
+                img2 = buscar_imagen_wikimedia(f"{query}", limite=5, buscar_mapa=True)
+                if img2 and not any(e['url'] == img2[0]['url'] for e in imagenes_a_insertar):
+                    imagenes_a_insertar.append(img2[0])
+            
+            # Contexto
+            if len(imagenes_a_insertar) < 3:
+                img3 = buscar_imagen_wikimedia(f"{query} photography", limite=5)
+                if img3:
+                    for i in img3:
+                        if not any(e['url'] == i['url'] for e in imagenes_a_insertar):
+                            imagenes_a_insertar.append(i)
+                            break
 
         # --- CONSTRUIR LA RESPUESTA FINAL ---
         parrafos = texto_limpio.split('\n\n')
         respuesta_final = ""
         
-        # Insertamos las 3 imágenes distribuidas
         for i, parrafo in enumerate(parrafos):
             respuesta_final += parrafo + "\n\n"
             
@@ -332,18 +347,18 @@ def responder():
                 respuesta_final += f'''
                 <div class="tarjeta-imagen">
                     <div class="titulo-imagen">📷 {img["nombre"]}</div>
-                    <img src="{img["url"]}" alt="{query}">
+                    <img src="{img["url"]}" alt="Imagen 1">
                     <div class="atribucion">Fuente: Wikimedia Commons | Autor: {img["autor"]} | Licencia: {img["licencia"]}</div>
                 </div>
                 ''' + "\n"
             
-            # Insertamos la segunda imagen después del tercer párrafo (o el que siga)
+            # Insertamos la segunda imagen después del tercer párrafo
             elif i == 2 and len(imagenes_a_insertar) > 0:
                 img = imagenes_a_insertar.pop(0)
                 respuesta_final += f'''
                 <div class="tarjeta-imagen">
                     <div class="titulo-imagen">📷 {img["nombre"]}</div>
-                    <img src="{img["url"]}" alt="{query}">
+                    <img src="{img["url"]}" alt="Imagen 2">
                     <div class="atribucion">Fuente: Wikimedia Commons | Autor: {img["autor"]} | Licencia: {img["licencia"]}</div>
                 </div>
                 ''' + "\n"
@@ -354,7 +369,7 @@ def responder():
             respuesta_final += f'''
             <div class="tarjeta-imagen">
                 <div class="titulo-imagen">📷 {img["nombre"]}</div>
-                <img src="{img["url"]}" alt="{query}">
+                <img src="{img["url"]}" alt="Imagen 3">
                 <div class="atribucion">Fuente: Wikimedia Commons | Autor: {img["autor"]} | Licencia: {img["licencia"]}</div>
             </div>
             ''' + "\n"
