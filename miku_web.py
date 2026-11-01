@@ -32,8 +32,20 @@ oauth.register(
 # ==========================================
 # CONFIGURACIÓN DE LA IA (GROQ)
 # ==========================================
-GROQ_API_KEY = "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"
+GROQ_API_KEY = "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"
 cliente = Groq(api_key=GROQ_API_KEY)
+
+# ==========================================
+# FUNCIÓN PARA LIMPIAR EL TEXTO
+# ==========================================
+def limpiar_texto(texto):
+    # Quita asteriscos, almohadillas y barras verticales
+    texto = re.sub(r'[*#|]', '', texto)
+    # Convierte listas numeradas con negrita a guiones simples
+    texto = re.sub(r'\d+\.\s*', '- ', texto)
+    # Limpia espacios dobles
+    texto = re.sub(r' +', ' ', texto)
+    return texto.strip()
 
 # ==========================================
 # FUNCIÓN PARA BUSCAR IMÁGENES
@@ -49,6 +61,8 @@ def buscar_imagen(tema):
             max_tokens=50
         )
         palabras_clave = completion.choices[0].message.content.strip().replace('"', '')
+        if not palabras_clave:
+            palabras_clave = tema
         
         # Buscamos la imagen con reintentos
         for intento in range(3):
@@ -89,7 +103,7 @@ HTML = """
         .chat-header { padding: 20px; border-bottom: 1px solid #eee; color: #2a6f97; font-weight: bold; font-size: 1.2rem; display: flex; align-items: center; justify-content: space-between; }
         .user-info { font-size: 0.9rem; color: #666; }
         #chat { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 15px; }
-        .mensaje { max-width: 80%; padding: 12px 16px; border-radius: 15px; line-height: 1.5; font-size: 0.95rem; }
+        .mensaje { max-width: 80%; padding: 12px 16px; border-radius: 15px; line-height: 1.5; font-size: 0.95rem; white-space: pre-wrap; }
         .mensaje-usuario { align-self: flex-end; background: #4aa3df; color: white; border-bottom-right-radius: 2px; }
         .mensaje-miku { align-self: flex-start; background: #f0f7ff; color: #1b3a4b; border-bottom-left-radius: 2px; border: 1px solid #dff5ff; }
         .mensaje-miku b { color: #2a6f97; }
@@ -150,7 +164,7 @@ HTML = """
             
             let respuestaFormateada = data.respuesta;
             
-            // Si hay imagen, la ponemos al principio del mensaje
+            // Si hay imagen, la ponemos al principio
             if (data.imagen) {
                 respuestaFormateada = `<img src="${data.imagen}" style="max-width: 100%; border-radius: 10px; margin-bottom: 10px;"><br>` + respuestaFormateada;
             }
@@ -197,7 +211,7 @@ def responder():
     # --- CONVERSACIÓN CON GROQ ---
     if user_id not in historiales:
         historiales[user_id] = [
-            {"role": "system", "content": "Eres Miku Nakano. Tu personalidad es dulce, cálida, amable y un poco tímida. Responde en español de forma clara y útil. Cuando te pidan una investigación o resumen, sé muy detallada y estructurada. IMPORTANTE: No uses tablas, asteriscos (**) ni símbolos raros. Usa solo texto plano con guiones simples (-) para las listas."}
+            {"role": "system", "content": "Eres Miku Nakano. Tu personalidad es dulce, cálida, amable y un poco tímida. Responde en español de forma clara y útil. Cuando te pidan una investigación o resumen, sé muy detallada y estructurada. Usa texto plano y viñetas simples."}
         ]
     
     historial_chat = historiales[user_id]
@@ -223,7 +237,8 @@ def responder():
             max_tokens=4000
         )
         respuesta = completion.choices[0].message.content
-        historial_chat.append({"role": "assistant", "content": respuesta})
+        respuesta_limpia = limpiar_texto(respuesta) # <-- AQUÍ LIMPIAMOS EL TEXTO
+        historial_chat.append({"role": "assistant", "content": respuesta_limpia})
         
         # --- BUSCAR IMAGEN SI ES UNA INVESTIGACIÓN O RESUMEN ---
         imagen_url = None
@@ -231,7 +246,7 @@ def responder():
             tema_busqueda = query if query else mensaje
             imagen_url = buscar_imagen(tema_busqueda)
         
-        return jsonify({"respuesta": respuesta, "imagen": imagen_url})
+        return jsonify({"respuesta": respuesta_limpia, "imagen": imagen_url})
     except Exception as e:
         return jsonify({"respuesta": f"Error: {e}"})
 
