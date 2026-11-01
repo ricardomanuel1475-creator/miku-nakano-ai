@@ -8,7 +8,7 @@ import uuid
 import requests
 import re
 import time
-import urllib.parse
+import json
 
 app = Flask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1, x_prefix=1)
@@ -46,37 +46,56 @@ def limpiar_texto(texto):
     return texto.strip()
 
 # ==========================================
-# FUNCIÓN PARA BUSCAR IMÁGENES (WIKIPEDIA + BING)
+# FUNCIÓN PARA BUSCAR IMÁGENES EN WIKIMEDIA COMMONS
 # ==========================================
-def buscar_imagen(tema):
-    tema_limpio = tema.lower().replace("resumen", "").replace("de", "").replace("la", "").replace("el", "").strip()
-    
-    # 1. Intentamos con Wikipedia en INGLÉS
+def buscar_imagen_wikimedia(palabras_clave, limite=1):
     try:
-        url_en = "https://en.wikipedia.org/w/api.php"
-        parametros = {
-            "action": "query", "format": "json", "formatversion": 2,
-            "prop": "pageimages", "piprop": "original", "titles": tema_limpio, "redirects": 1
+        url = "https://commons.wikimedia.org/w/api.php"
+        # User-Agent obligatorio para la API de Wikimedia
+        headers = {
+            "User-Agent": "MikuNakanoAI/1.0 (https://miku-ai.onrender.com; contacto@ejemplo.com)"
         }
-        response = requests.get(url_en, params=parametros, timeout=5)
-        if response.ok:
+        params = {
+            "action": "query",
+            "generator": "search",
+            "gsrsearch": palabras_clave,
+            "gsrnamespace": "6",  # Namespace 6 = Archivos en Commons
+            "gsrlimit": limite,
+            "prop": "imageinfo",
+            "iiprop": "url|extmetadata",
+            "iiurlwidth": "800", # Ancho de la imagen
+            "format": "json"
+        }
+        
+        response = requests.get(url, headers=headers, params=params, timeout=15)
+        
+        if response.status_code == 200:
             data = response.json()
-            paginas = data.get("query", {}).get("pages", [])
-            for page in paginas:
-                if "original" in page:
-                    return page["original"]["source"]
-    except: pass
-
-    # 2. Si Wikipedia falla, intentamos con Bing (fotos reales, sin texto)
-    try:
-        query_bing = f"{tema_limpio} historical photo documentary"
-        query_encoded = urllib.parse.quote(query_bing)
-        # El filtro "photo-photo" evita memes y pósters
-        url_bing = f"https://tse1.mm.bing.net/th?q={query_encoded}&qft=+filterui:photo-photo&w=600&h=400&c=7"
-        return url_bing
-    except: pass
-
-    return None
+            paginas = data.get("query", {}).get("pages", {})
+            
+            imagenes_encontradas = []
+            for page_id, pagina in paginas.items():
+                info = pagina.get("imageinfo", [{}])[0]
+                url_imagen = info.get("thumburl") or info.get("url")
+                
+                if url_imagen:
+                    metadatos = info.get("extmetadata", {})
+                    licencia = metadatos.get("LicenseShortName", {}).get("value", "Ver en Commons")
+                    autor = metadatos.get("Artist", {}).get("value", "Desconocido")
+                    
+                    # Limpiamos etiquetas HTML del autor si las hay
+                    autor = re.sub(r'<[^>]+>', '', autor)
+                    
+                    imagenes_encontradas.append({
+                        "url": url_imagen,
+                        "autor": autor.strip(),
+                        "licencia": licencia.strip()
+                    })
+            return imagenes_encontradas
+        return []
+    except Exception as e:
+        print(f"Error buscando imagen en Wikimedia Commons: {e}")
+        return []
 
 historiales = {}
 
@@ -101,7 +120,8 @@ HTML = """
         .mensaje-usuario { align-self: flex-end; background: #4aa3df; color: white; border-bottom-right-radius: 2px; }
         .mensaje-miku { align-self: flex-start; background: #f0f7ff; color: #1b3a4b; border-bottom-left-radius: 2px; border: 1px solid #dff5ff; }
         .mensaje-miku b { color: #2a6f97; }
-        .mensaje-miku img { display: block; width: 100%; max-height: 350px; object-fit: cover; border-radius: 5px; margin-top: 10px; margin-bottom: 10px; }
+        .mensaje-miku img { display: block; width: 100%; max-height: 300px; object-fit: cover; border-radius: 5px; margin: 10px 0; }
+        .atribucion { font-size: 0.75rem; color: #666; margin-top: -5px; margin-bottom: 10px; font-style: italic; }
         .input-area { padding: 15px; padding-bottom: 25px; border-top: 1px solid #eee; display: flex; gap: 10px; background: #fafafa; }
         input { flex: 1; padding: 15px; border-radius: 30px; border: 1px solid #ddd; outline: none; font-size: 1rem; transition: 0.3s; }
         input:focus { border-color: #4aa3df; box-shadow: 0 0 0 3px rgba(74, 163, 223, 0.2); }
@@ -146,7 +166,7 @@ HTML = """
             chat.scrollTop = chat.scrollHeight;
 
             const idPensando = 'pensando-' + Date.now();
-            chat.innerHTML += `<div class="mensaje mensaje-miku" id="${idPensando}"><b>Miku:</b> Investigando y buscando imagen... 🔍</div>`;
+            chat.innerHTML += `<div class="mensaje mensaje-miku" id="${idPensando}"><b>Miku:</b> Investigando y buscando imágenes en Wikimedia... 🔍</div>`;
             chat.scrollTop = chat.scrollHeight;
 
             const response = await fetch('/responder', {
@@ -156,13 +176,8 @@ HTML = """
             });
             const data = await response.json();
             
-            let respuestaFormateada = data.respuesta;
-            
-            if (data.imagen) {
-                respuestaFormateada = `<img src="${data.imagen}"><br>` + respuestaFormateada;
-            }
-            
-            document.getElementById(idPensando).innerHTML = `<b>Miku:</b> ${respuestaFormateada}`;
+            // El backend ya nos devuelve el HTML con las imágenes incrustadas
+            document.getElementById(idPensando).innerHTML = `<b>Miku:</b> ${data.respuesta}`;
             chat.scrollTop = chat.scrollHeight;
         }
     </script>
@@ -218,6 +233,13 @@ def responder():
                 historial_chat.append({"role": "system", "content": f"Info de internet: {info_web}"})
             except: pass
 
+    # Instrucción especial para que la IA sepa DÓNDE pedir imágenes
+    instruccion_imagenes = (
+        "IMPORTANTE: Al final de cada sección de tu respuesta, si consideras que una imagen ayudaría a entender el tema, "
+        "añade una etiqueta secreta con el formato exacto: [IMG: palabras clave en inglés]. "
+        "Por ejemplo: [IMG: world war 2 soldiers]. Usa máximo 2 imágenes por respuesta."
+    )
+    historial_chat.append({"role": "system", "content": instruccion_imagenes})
     historial_chat.append({"role": "user", "content": mensaje})
     
     try:
@@ -227,16 +249,31 @@ def responder():
             temperature=0.7,
             max_tokens=4000
         )
-        respuesta = completion.choices[0].message.content
-        respuesta_limpia = limpiar_texto(respuesta)
-        historial_chat.append({"role": "assistant", "content": respuesta_limpia})
+        respuesta_cruda = completion.choices[0].message.content
         
-        imagen_url = None
-        if "investiga" in texto_lower or "resumen" in texto_lower or "tarea" in texto_lower or "busca" in texto_lower:
-            tema_busqueda = query if query else mensaje
-            imagen_url = buscar_imagen(tema_busqueda)
+        # --- PROCESAMOS LA RESPUESTA PARA INSERTAR LAS IMÁGENES ---
+        patron = r'\[IMG:\s*(.*?)\]'
+        partes = re.split(patron, respuesta_cruda)
         
-        return jsonify({"respuesta": respuesta_limpia, "imagen": imagen_url})
+        respuesta_final = ""
+        for i, parte in enumerate(partes):
+            if i % 2 == 0:
+                # Es texto normal, lo limpiamos
+                respuesta_final += limpiar_texto(parte) + "\n"
+            else:
+                # Es una palabra clave para imagen
+                palabras_clave = parte.strip()
+                imagenes = buscar_imagen_wikimedia(palabras_clave, limite=1)
+                
+                if imagenes:
+                    img = imagenes[0]
+                    # Insertamos la imagen y el pie de foto con atribución
+                    atribucion = f'<div class="atribucion">Fuente: Wikimedia Commons | Autor: {img["autor"]} | Licencia: {img["licencia"]}</div>'
+                    respuesta_final += f'<img src="{img["url"]}" alt="{palabras_clave}">\n{atribucion}\n'
+        
+        historial_chat.append({"role": "assistant", "content": respuesta_final})
+        
+        return jsonify({"respuesta": respuesta_final})
     except Exception as e:
         return jsonify({"respuesta": f"Error: {e}"})
 
