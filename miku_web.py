@@ -75,33 +75,23 @@ def buscar_imagen_wikimedia(palabras_clave, limite=2):
             
             imagenes_encontradas = []
             for page_id, pagina in paginas.items():
-                # El título de la página es el nombre del archivo (ej: "File:Tank.jpg")
                 titulo_archivo = pagina.get("title", "")
-                # Limpiamos el prefijo "File:" y las extensiones para mostrarlo bonito
                 nombre_limpio = titulo_archivo.replace("File:", "").rsplit('.', 1)[0].replace('_', ' ')
                 
                 info = pagina.get("imageinfo", [{}])[0]
                 url_imagen = info.get("thumburl") or info.get("url")
                 
-                # Filtro de seguridad: evitar imágenes SVG o formatos raros
                 if url_imagen and not url_imagen.lower().endswith(('.svg', '.tiff')):
                     metadatos = info.get("extmetadata", {})
                     licencia = metadatos.get("LicenseShortName", {}).get("value", "Ver en Commons")
                     autor = metadatos.get("Artist", {}).get("value", "Desconocido")
-                    
-                    # Limpiamos etiquetas HTML del autor
                     autor = re.sub(r'<[^>]+>', '', autor)
-                    
-                    # Descripción de la imagen (si existe)
-                    descripcion = metadatos.get("ImageDescription", {}).get("value", "")
-                    descripcion = re.sub(r'<[^>]+>', '', descripcion).strip()
                     
                     imagenes_encontradas.append({
                         "url": url_imagen,
                         "nombre": nombre_limpio,
                         "autor": autor.strip(),
-                        "licencia": licencia.strip(),
-                        "descripcion": descripcion
+                        "licencia": licencia.strip()
                     })
             return imagenes_encontradas
         return []
@@ -132,11 +122,24 @@ HTML = """
         .mensaje-usuario { align-self: flex-end; background: #4aa3df; color: white; border-bottom-right-radius: 2px; }
         .mensaje-miku { align-self: flex-start; background: #f0f7ff; color: #1b3a4b; border-bottom-left-radius: 2px; border: 1px solid #dff5ff; }
         .mensaje-miku b { color: #2a6f97; }
-        .mensaje-miku img { display: block; width: 100%; max-height: 350px; object-fit: cover; border-radius: 8px; margin: 10px 0 5px 0; border: 1px solid #ccc; }
         
-        .tarjeta-imagen { background: #fff; border-radius: 8px; padding: 5px; margin: 10px 0; border: 1px solid #e0e0e0; }
-        .titulo-imagen { font-weight: bold; color: #2a6f97; font-size: 0.9rem; margin-bottom: 5px; text-transform: capitalize; }
-        .atribucion { font-size: 0.75rem; color: #666; margin-top: 5px; font-style: italic; border-top: 1px solid #eee; padding-top: 5px; }
+        /* CSS ACTUALIZADO PARA QUE LAS IMÁGENES NO SE RECORTEN */
+        .tarjeta-imagen { background: #fff; border-radius: 8px; padding: 10px; margin: 15px 0; border: 1px solid #e0e0e0; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        .titulo-imagen { font-weight: bold; color: #2a6f97; font-size: 0.9rem; margin-bottom: 8px; text-transform: capitalize; }
+        
+        .tarjeta-imagen img { 
+            display: block; 
+            width: 100%; 
+            height: auto; 
+            max-height: 450px; /* Límite máximo para que no se haga gigante */
+            object-fit: contain; /* ESTO HACE QUE SE VEA COMPLETA SIN RECORTAR */
+            background-color: #f8f9fa; /* Fondo gris claro por si la foto es vertical */
+            border-radius: 5px; 
+            margin: 0 auto; 
+            border: 1px solid #eee;
+        }
+        
+        .atribucion { font-size: 0.75rem; color: #666; margin-top: 8px; font-style: italic; border-top: 1px solid #eee; padding-top: 5px; }
         
         .input-area { padding: 15px; padding-bottom: 25px; border-top: 1px solid #eee; display: flex; gap: 10px; background: #fafafa; }
         input { flex: 1; padding: 15px; border-radius: 30px; border: 1px solid #ddd; outline: none; font-size: 1rem; transition: 0.3s; }
@@ -249,7 +252,6 @@ def responder():
                 historial_chat.append({"role": "system", "content": f"Info de internet: {info_web}"})
             except: pass
 
-    # Instrucción MEJORADA: forzando palabras clave muy específicas
     instruccion_imagenes = (
         "IMPORTANTE: Para hacer tu respuesta más visual, añade etiquetas secretas con imágenes. "
         "El formato exacto es: [IMG: palabras clave en inglés]. "
@@ -271,7 +273,6 @@ def responder():
         )
         respuesta_cruda = completion.choices[0].message.content
         
-        # --- PROCESAMOS LA RESPUESTA PARA INSERTAR LAS IMÁGENES ---
         patron = r'\[IMG:\s*(.*?)\]'
         partes = re.split(patron, respuesta_cruda)
         
@@ -281,12 +282,10 @@ def responder():
                 respuesta_final += limpiar_texto(parte) + "\n"
             else:
                 palabras_clave = parte.strip()
-                # Buscamos la imagen
                 imagenes = buscar_imagen_wikimedia(palabras_clave, limite=1)
                 
                 if imagenes:
                     img = imagenes[0]
-                    # Creamos una tarjeta visual con el título de la imagen
                     tarjeta = f'''
                     <div class="tarjeta-imagen">
                         <div class="titulo-imagen">📷 {img["nombre"]}</div>
