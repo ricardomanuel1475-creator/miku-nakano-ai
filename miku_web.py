@@ -7,6 +7,7 @@ from authlib.integrations.flask_client import OAuth
 import uuid
 import requests
 import re
+import time
 
 app = Flask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1, x_prefix=1)
@@ -35,12 +36,12 @@ GROQ_API_KEY = "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"
 cliente = Groq(api_key=GROQ_API_KEY)
 
 # ==========================================
-# FUNCIÓN PARA BUSCAR IMÁGENES RELACIONADAS
+# FUNCIÓN PARA BUSCAR IMÁGENES
 # ==========================================
 def buscar_imagen(tema):
     try:
-        # Le pedimos a Groq que extraiga el tema principal en inglés para buscar la imagen
-        instrucciones = f"Extrae el tema principal de esta investigación en inglés, solo 3 o 4 palabras clave, sin explicaciones. Investigación: '{tema}'"
+        # Le pedimos a Groq que extraiga el tema principal en inglés
+        instrucciones = f"Extract the main topic of this research in English, just 3 or 4 keywords, no explanations. Research: '{tema}'"
         completion = cliente.chat.completions.create(
             model="openai/gpt-oss-120b",
             messages=[{"role": "user", "content": instrucciones}],
@@ -49,20 +50,24 @@ def buscar_imagen(tema):
         )
         palabras_clave = completion.choices[0].message.content.strip().replace('"', '')
         
-        # Buscamos imágenes en DuckDuckGo
-        resultados = DDGS().images(
-            keywords=palabras_clave,
-            region="wt-wt",
-            safesearch="moderate",
-            size="Large",
-            max_results=1
-        )
-        
-        if resultados:
-            return resultados[0]['image'] # Devuelve el enlace directo a la imagen
+        # Reintentamos hasta 3 veces si DuckDuckGo falla
+        for intento in range(3):
+            try:
+                resultados = DDGS().images(
+                    keywords=palabras_clave,
+                    region="wt-wt",
+                    safesearch="moderate",
+                    size="Large",
+                    max_results=1
+                )
+                if resultados:
+                    return resultados[0]['image']
+            except Exception as e:
+                print(f"Error buscando imagen (intento {intento+1}): {e}")
+                time.sleep(2)
         return None
     except Exception as e:
-        print(f"Error buscando imagen: {e}")
+        print(f"Error extrayendo palabras clave: {e}")
         return None
 
 historiales = {}
@@ -146,7 +151,7 @@ HTML = """
             let respuestaFormateada = data.respuesta;
             
             if (data.imagen) {
-                respuestaFormateada += `<br><a href="${data.imagen}" target="_blank">📸 Ver imagen relacionada</a><br><img src="${data.imagen}" style="max-width: 100%; border-radius: 10px; margin-top: 10px;">`;
+                respuestaFormateada += `<br><br><a href="${data.imagen}" target="_blank">📸 Ver imagen relacionada</a><br><img src="${data.imagen}" style="max-width: 100%; border-radius: 10px; margin-top: 10px;">`;
             }
             
             document.getElementById(idPensando).innerHTML = `<b>Miku:</b> ${respuestaFormateada}`;
@@ -188,18 +193,16 @@ def responder():
     
     texto_lower = mensaje.lower()
     
-    # --- CONVERSACIÓN CON GROQ ---
     if user_id not in historiales:
         historiales[user_id] = [
-            {"role": "system", "content": "Eres Miku Nakano. Tu personalidad es dulce, cálida, amable y un poco tímida. IMPORTANTE: No uses apelativos como 'Director' ni 'Tú' a menos que te lo pidan. Responde en español de forma concisa y cariñosa."}
+            {"role": "system", "content": "Eres Miku Nakano. Tu personalidad es dulce, cálida, amable y un poco tímida. Responde en español de forma clara y útil. Cuando te pidan una investigación o resumen, sé muy detallada y estructurada, como un buen profesor."}
         ]
     
     historial_chat = historiales[user_id]
-    query = ""  # Inicializamos la variable para evitar errores
+    query = ""
     
-    # --- BÚSQUEDA EN INTERNET SI ES UNA INVESTIGACIÓN ---
-    if "busca" in texto_lower or "investiga" in texto_lower:
-        query = texto_lower.replace("miku", "").replace("busca", "").replace("investiga", "").strip()
+    if "busca" in texto_lower or "investiga" in texto_lower or "resumen" in texto_lower:
+        query = texto_lower.replace("miku", "").replace("busca", "").replace("investiga", "").replace("resumen", "").replace("hazme", "").replace("de", "").strip()
         if query:
             try:
                 resultados = DDGS().text(query, max_results=3)
@@ -214,15 +217,14 @@ def responder():
             model="openai/gpt-oss-120b",
             messages=historial_chat,
             temperature=0.7,
-            max_tokens=1500
+            max_tokens=4000  # Aumentado para investigaciones largas
         )
         respuesta = completion.choices[0].message.content
         historial_chat.append({"role": "assistant", "content": respuesta})
         
-        # --- SI ES UNA INVESTIGACIÓN O RESUMEN, BUSCAMOS UNA IMAGEN ---
+        # --- BUSCAR IMAGEN SI ES UNA INVESTIGACIÓN O RESUMEN ---
         imagen_url = None
         if "investiga" in texto_lower or "resumen" in texto_lower or "tarea" in texto_lower:
-            # Usamos el query si existe, si no, usamos el mensaje original
             tema_busqueda = query if query else mensaje
             imagen_url = buscar_imagen(tema_busqueda)
         
