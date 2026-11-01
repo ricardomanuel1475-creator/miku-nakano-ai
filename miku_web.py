@@ -47,9 +47,9 @@ def limpiar_texto(texto):
     return texto.strip()
 
 # ==========================================
-# FUNCIÓN PARA BUSCAR IMÁGENES EN WIKIMEDIA COMMONS (CON FILTRO)
+# FUNCIÓN PARA BUSCAR IMÁGENES EN WIKIMEDIA COMMONS
 # ==========================================
-def buscar_imagen_wikimedia(palabras_clave, limite=5):
+def buscar_imagen_wikimedia(palabras_clave, limite=10):
     try:
         url = "https://commons.wikimedia.org/w/api.php"
         headers = {
@@ -60,9 +60,9 @@ def buscar_imagen_wikimedia(palabras_clave, limite=5):
             "generator": "search",
             "gsrsearch": palabras_clave,
             "gsrnamespace": "6",
-            "gsrlimit": limite, # Pedimos más opciones por si la primera es basura
+            "gsrlimit": limite,
             "prop": "imageinfo",
-            "iiprop": "url|extmetadata",
+            "iiprop": "url|size|extmetadata",
             "iiurlwidth": "800",
             "format": "json"
         }
@@ -80,14 +80,19 @@ def buscar_imagen_wikimedia(palabras_clave, limite=5):
                 
                 info = pagina.get("imageinfo", [{}])[0]
                 url_imagen = info.get("thumburl") or info.get("url")
+                ancho_original = info.get("width", 0)
                 
                 if not url_imagen: continue
 
-                # FILTRO ANTI-BASURA: Rechazar si es SVG, TIFF, si es de Google Books o tiene pinta de libro
-                es_basura = any(x in url_imagen.lower() or x in titulo_archivo for x in ["google books", "google_books", "book cover", "portada", "scan"])
+                # --- FILTROS DE CALIDAD (AHORA PERMITE MAPAS) ---
                 es_formato_valido = url_imagen.lower().endswith(('.jpg', '.jpeg', '.png'))
+                es_alta_resolucion = ancho_original >= 600 # Bajamos un poquito el requisito para permitir mapas
+                
+                # Solo bloqueamos cosas que son basura de texto, pero DEJAMOS PASAR los mapas
+                palabras_basura = ["book", "document", "scan", "text", "cover", "signature", "graph", "chart"]
+                es_basura = any(palabra in titulo_archivo for palabra in palabras_basura)
 
-                if es_formato_valido and not es_basura:
+                if es_formato_valido and es_alta_resolucion and not es_basura:
                     metadatos = info.get("extmetadata", {})
                     licencia = metadatos.get("LicenseShortName", {}).get("value", "Ver en Commons")
                     autor = metadatos.get("Artist", {}).get("value", "Desconocido")
@@ -100,7 +105,6 @@ def buscar_imagen_wikimedia(palabras_clave, limite=5):
                         "licencia": licencia.strip()
                     })
             
-            # Devolvemos solo las que pasaron el filtro
             return imagenes_validas
             
         return []
@@ -186,7 +190,7 @@ HTML = """
             chat.scrollTop = chat.scrollHeight;
 
             const idPensando = 'pensando-' + Date.now();
-            chat.innerHTML += `<div class="mensaje mensaje-miku" id="${idPensando}"><b>Miku:</b> Investigando y buscando imágenes exactas... 🔍</div>`;
+            chat.innerHTML += `<div class="mensaje mensaje-miku" id="${idPensando}"><b>Miku:</b> Buscando imágenes y mapas en Alta Definición... 🔍</div>`;
             chat.scrollTop = chat.scrollHeight;
 
             const response = await fetch('/responder', {
@@ -252,16 +256,14 @@ def responder():
                 historial_chat.append({"role": "system", "content": f"Info de internet: {info_web}"})
             except: pass
 
-    # PROMPT MEJORADO: Obligamos a que si es un personaje, la primera foto sea su retrato
+    # Instrucciones actualizadas: Permite mapas y pide retratos
     instruccion_imagenes = (
         "IMPORTANTE: Para hacer tu respuesta más visual, añade etiquetas secretas con imágenes. "
         "El formato exacto es: [IMG: palabras clave en inglés]. "
-        "CRÍTICO 1: Usa palabras clave MUY ESPECÍFICAS en inglés (mínimo 3 palabras). "
-        "CRÍTICO 2: Si el tema principal de la consulta es un PERSONAJE HISTÓRICO o PERSONA FAMOSA, "
-        "la PRIMERA etiqueta de imagen DEBE SER OBLIGATORIAMENTE su nombre seguido de la palabra 'portrait' o 'face'. "
-        "Ejemplo: [IMG: Francisco Pizarro portrait]. "
-        "CRÍTICO 3: No uses palabras genéricas como 'war', 'history' o 'people'. "
-        "Usa máximo 2 imágenes por respuesta."
+        "CRÍTICO 1: Si el tema principal es un PERSONAJE o PERSONA, la PRIMERA etiqueta DEBE ser su nombre + 'portrait'. Ejemplo: [IMG: Miguel Grau portrait]. "
+        "CRÍTICO 2: Si hablas de un lugar, país, batalla o ruta, PUEDES incluir un mapa usando la palabra 'map'. Ejemplo: [IMG: Battle of Angamos map]. "
+        "CRÍTICO 3: No uses palabras genéricas como 'war', 'history' o 'people'. Usa términos fotográficos como 'landscape', 'photography', 'high resolution'. "
+        "Usa máximo 3 imágenes por respuesta (ejemplo: 1 retrato, 1 mapa, 1 foto del lugar)."
     )
     historial_chat.append({"role": "system", "content": instruccion_imagenes})
     historial_chat.append({"role": "user", "content": mensaje})
@@ -284,12 +286,10 @@ def responder():
                 respuesta_final += limpiar_texto(parte) + "\n"
             else:
                 palabras_clave = parte.strip()
-                # Buscamos hasta 5 opciones para tener de donde escoger
-                imagenes = buscar_imagen_wikimedia(palabras_clave, limite=5)
+                imagenes = buscar_imagen_wikimedia(palabras_clave, limite=10)
                 
                 if imagenes:
-                    # Tomamos la primera imagen que sobrevivió al filtro anti-basura
-                    img = imagenes[0]
+                    img = imagenes[0] 
                     tarjeta = f'''
                     <div class="tarjeta-imagen">
                         <div class="titulo-imagen">📷 {img["nombre"]}</div>
