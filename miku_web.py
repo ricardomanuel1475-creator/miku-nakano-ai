@@ -32,7 +32,7 @@ oauth.register(
 # ==========================================
 # CONFIGURACIÓN DE LA IA (GROQ)
 # ==========================================
-GROQ_API_KEY = "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"
+GROQ_API_KEY = "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"
 cliente = Groq(api_key=GROQ_API_KEY)
 
 # ==========================================
@@ -45,54 +45,28 @@ def limpiar_texto(texto):
     return texto.strip()
 
 # ==========================================
-# FUNCIÓN PARA BUSCAR IMÁGENES EN WIKIPEDIA
+# FUNCIÓN PARA BUSCAR IMÁGENES EN DUCKDUCKGO
 # ==========================================
 def buscar_imagen(tema):
     try:
-        # 1. Buscamos primero en la Wikipedia en ESPAÑOL
-        url_es = "https://es.wikipedia.org/w/api.php"
-        parametros_es = {
-            "action": "query",
-            "format": "json",
-            "formatversion": 2,
-            "prop": "pageimages",
-            "piprop": "original",
-            "titles": tema,
-            "redirects": 1
-        }
+        # Limpiamos el tema para que la búsqueda sea efectiva
+        tema_limpio = tema.lower().replace("resumen", "").replace("de", "").replace("la", "").replace("el", "").strip()
         
-        try:
-            response = requests.get(url_es, params=parametros_es, timeout=10)
-            if response.ok:
-                data = response.json()
-                paginas = data.get("query", {}).get("pages", [])
-                for page in paginas:
-                    if "original" in page:
-                        return page["original"]["source"]
-        except: pass
-        
-        # 2. Si no encuentra en español, busca en INGLÉS
-        url_en = "https://en.wikipedia.org/w/api.php"
-        parametros_en = {
-            "action": "query",
-            "format": "json",
-            "formatversion": 2,
-            "prop": "pageimages",
-            "piprop": "original",
-            "titles": tema,
-            "redirects": 1
-        }
-        
-        try:
-            response = requests.get(url_en, params=parametros_en, timeout=10)
-            if response.ok:
-                data = response.json()
-                paginas = data.get("query", {}).get("pages", [])
-                for page in paginas:
-                    if "original" in page:
-                        return page["original"]["source"]
-        except: pass
-
+        # Buscamos la imagen con reintentos
+        for intento in range(3):
+            try:
+                resultados = DDGS().images(
+                    keywords=tema_limpio,
+                    region="wt-wt",
+                    safesearch="moderate",
+                    size="Large",
+                    max_results=1
+                )
+                if resultados:
+                    return resultados[0]['image']
+            except Exception as e:
+                print(f"Error buscando imagen (intento {intento+1}): {e}")
+                time.sleep(2)
         return None
     except Exception as e:
         print(f"Error crítico buscando imagen: {e}")
@@ -178,6 +152,7 @@ HTML = """
             
             let respuestaFormateada = data.respuesta;
             
+            // Si hay imagen, la ponemos al principio
             if (data.imagen) {
                 respuestaFormateada = `<img src="${data.imagen}" style="max-width: 100%; border-radius: 10px; margin-bottom: 10px;"><br>` + respuestaFormateada;
             }
