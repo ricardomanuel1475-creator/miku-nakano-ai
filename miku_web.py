@@ -45,31 +45,18 @@ def limpiar_texto(texto):
     return texto.strip()
 
 # ==========================================
-# FUNCIÓN PARA BUSCAR IMÁGENES EN DUCKDUCKGO
+# FUNCIÓN PARA BUSCAR IMÁGENES (BING)
 # ==========================================
 def buscar_imagen(tema):
     try:
-        # Limpiamos el tema para que la búsqueda sea efectiva
+        # Limpiamos el tema para la búsqueda
         tema_limpio = tema.lower().replace("resumen", "").replace("de", "").replace("la", "").replace("el", "").strip()
         
-        # Buscamos la imagen con reintentos
-        for intento in range(3):
-            try:
-                resultados = DDGS().images(
-                    keywords=tema_limpio,
-                    region="wt-wt",
-                    safesearch="moderate",
-                    size="Large",
-                    max_results=1
-                )
-                if resultados:
-                    return resultados[0]['image']
-            except Exception as e:
-                print(f"Error buscando imagen (intento {intento+1}): {e}")
-                time.sleep(2)
-        return None
+        # Usamos la URL directa de Bing para obtener la imagen
+        # Esta URL es pública y no requiere descarga
+        return f"https://tse1.mm.bing.net/th?q={tema_limpio}"
     except Exception as e:
-        print(f"Error crítico buscando imagen: {e}")
+        print(f"Error buscando imagen con Bing: {e}")
         return None
 
 historiales = {}
@@ -152,7 +139,6 @@ HTML = """
             
             let respuestaFormateada = data.respuesta;
             
-            // Si hay imagen, la ponemos al principio
             if (data.imagen) {
                 respuestaFormateada = `<img src="${data.imagen}" style="max-width: 100%; border-radius: 10px; margin-bottom: 10px;"><br>` + respuestaFormateada;
             }
@@ -196,7 +182,6 @@ def responder():
     
     texto_lower = mensaje.lower()
     
-    # --- CONVERSACIÓN CON GROQ ---
     if user_id not in historiales:
         historiales[user_id] = [
             {"role": "system", "content": "Eres Miku Nakano. Tu personalidad es dulce, cálida, amable y un poco tímida. Responde en español de forma clara y útil. Cuando te pidan una investigación o resumen, sé muy detallada y estructurada. Usa texto plano y viñetas simples."}
@@ -205,7 +190,6 @@ def responder():
     historial_chat = historiales[user_id]
     query = ""
     
-    # --- BÚSQUEDA EN INTERNET SI ES UNA INVESTIGACIÓN ---
     if "busca" in texto_lower or "investiga" in texto_lower or "resumen" in texto_lower:
         query = texto_lower.replace("miku", "").replace("busca", "").replace("investiga", "").replace("resumen", "").replace("hazme", "").replace("de", "").strip()
         if query:
@@ -228,7 +212,6 @@ def responder():
         respuesta_limpia = limpiar_texto(respuesta)
         historial_chat.append({"role": "assistant", "content": respuesta_limpia})
         
-        # --- BUSCAR IMAGEN SI ES UNA INVESTIGACIÓN O RESUMEN ---
         imagen_url = None
         if "investiga" in texto_lower or "resumen" in texto_lower or "tarea" in texto_lower or "busca" in texto_lower:
             tema_busqueda = query if query else mensaje
