@@ -39,11 +39,8 @@ cliente = Groq(api_key=GROQ_API_KEY)
 # FUNCIÓN PARA LIMPIAR EL TEXTO
 # ==========================================
 def limpiar_texto(texto):
-    # Quita asteriscos, almohadillas y barras verticales
     texto = re.sub(r'[*#|]', '', texto)
-    # Convierte listas numeradas con negrita a guiones simples
     texto = re.sub(r'\d+\.\s*', '- ', texto)
-    # Limpia espacios dobles
     texto = re.sub(r' +', ' ', texto)
     return texto.strip()
 
@@ -52,37 +49,53 @@ def limpiar_texto(texto):
 # ==========================================
 def buscar_imagen(tema):
     try:
-        # 1. Buscamos el artículo exacto en inglés
-        url_busqueda = "https://en.wikipedia.org/w/api.php"
-        parametros = {
+        # 1. Buscamos primero en la Wikipedia en ESPAÑOL
+        url_es = "https://es.wikipedia.org/w/api.php"
+        parametros_es = {
             "action": "query",
             "format": "json",
+            "formatversion": 2,
             "prop": "pageimages",
             "piprop": "original",
             "titles": tema,
             "redirects": 1
         }
         
-        response = requests.get(url_busqueda, params=parametros, timeout=10)
-        data = response.json()
+        try:
+            response = requests.get(url_es, params=parametros_es, timeout=10)
+            if response.ok:
+                data = response.json()
+                paginas = data.get("query", {}).get("pages", [])
+                for page in paginas:
+                    if "original" in page:
+                        return page["original"]["source"]
+        except: pass
         
-        paginas = data.get("query", {}).get("pages", {})
-        for page_id, page_info in paginas.items():
-            if "original" in page_info:
-                return page_info["original"]["source"]
+        # 2. Si no encuentra en español, busca en INGLÉS
+        url_en = "https://en.wikipedia.org/w/api.php"
+        parametros_en = {
+            "action": "query",
+            "format": "json",
+            "formatversion": 2,
+            "prop": "pageimages",
+            "piprop": "original",
+            "titles": tema,
+            "redirects": 1
+        }
         
-        # 2. Si no encuentra el título exacto, usa la búsqueda general
-        url_general = f"https://en.wikipedia.org/w/api.php?action=query&format=json&prop=pageimages&piprop=original&generator=search&gsrsearch={tema}&gsrlimit=1"
-        response = requests.get(url_general, timeout=10)
-        data = response.json()
-        paginas = data.get("query", {}).get("pages", {})
-        for page_id, page_info in paginas.items():
-            if "original" in page_info:
-                return page_info["original"]["source"]
-                
+        try:
+            response = requests.get(url_en, params=parametros_en, timeout=10)
+            if response.ok:
+                data = response.json()
+                paginas = data.get("query", {}).get("pages", [])
+                for page in paginas:
+                    if "original" in page:
+                        return page["original"]["source"]
+        except: pass
+
         return None
     except Exception as e:
-        print(f"Error buscando imagen en Wikipedia: {e}")
+        print(f"Error crítico buscando imagen: {e}")
         return None
 
 historiales = {}
@@ -165,7 +178,6 @@ HTML = """
             
             let respuestaFormateada = data.respuesta;
             
-            // Si hay imagen, la ponemos al principio
             if (data.imagen) {
                 respuestaFormateada = `<img src="${data.imagen}" style="max-width: 100%; border-radius: 10px; margin-bottom: 10px;"><br>` + respuestaFormateada;
             }
@@ -238,7 +250,7 @@ def responder():
             max_tokens=4000
         )
         respuesta = completion.choices[0].message.content
-        respuesta_limpia = limpiar_texto(respuesta) # Limpiamos el texto
+        respuesta_limpia = limpiar_texto(respuesta)
         historial_chat.append({"role": "assistant", "content": respuesta_limpia})
         
         # --- BUSCAR IMAGEN SI ES UNA INVESTIGACIÓN O RESUMEN ---
