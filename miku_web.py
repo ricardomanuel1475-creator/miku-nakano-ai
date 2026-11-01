@@ -6,9 +6,7 @@ from duckduckgo_search import DDGS
 from authlib.integrations.flask_client import OAuth
 import uuid
 import requests
-import urllib.parse
-import base64
-import json
+import re
 
 app = Flask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1, x_prefix=1)
@@ -37,33 +35,34 @@ GROQ_API_KEY = "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"
 cliente = Groq(api_key=GROQ_API_KEY)
 
 # ==========================================
-# CONFIGURACIÓN DE CLOUDFLARE (IMÁGENES)
+# FUNCIÓN PARA BUSCAR IMÁGENES
 # ==========================================
-CLOUDFLARE_ACCOUNT_ID = "b5cc836dcf39c9e98b583f5269357df"
-CLOUDFLARE_API_TOKEN = "cfut_VCArKbPY54KyLiEiiwXAJvYYXCUMbosovTppCn961af091a7"
-
-def generar_imagen(prompt):
-    # Usamos flux-1-schnell (acepta JSON)
-    url = f"https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai/run/@cf/black-forest-labs/flux-1-schnell"
-    
-    headers = {
-        "Authorization": f"Bearer {CLOUDFLARE_API_TOKEN}",
-        "Content-Type": "application/json"
-    }
-    
-    # Prompt detallado para forzar calidad
-    prompt_maestro = f"Professional photography of {prompt}, perfect symmetric eyes, sharp focus on both eyes, detailed iris and pupil, flawless fur texture, hyperrealistic, 8k resolution, extremely detailed, cinematic lighting, masterpiece"
-    
-    payload = {"prompt": prompt_maestro}
-    
+def buscar_imagen(tema):
     try:
-        response = requests.post(url, headers=headers, json=payload, timeout=60)
-        response.raise_for_status()
-        data = response.json()
-        b64_imagen = data["result"]["image"]
-        return f"data:image/jpeg;base64,{b64_imagen}"
+        # Le pedimos a Groq que extraiga el tema principal en inglés para buscar la imagen
+        instrucciones = f"Extrae el tema principal de esta investigación en inglés, solo 3 o 4 palabras clave, sin explicaciones. Investigación: '{tema}'"
+        completion = cliente.chat.completions.create(
+            model="openai/gpt-oss-120b",
+            messages=[{"role": "user", "content": instrucciones}],
+            temperature=0.3,
+            max_tokens=50
+        )
+        palabras_clave = completion.choices[0].message.content.strip().replace('"', '')
+        
+        # Buscamos imágenes en DuckDuckGo
+        resultados = DDGS().images(
+            keywords=palabras_clave,
+            region="wt-wt",
+            safesearch="moderate",
+            size="Large",
+            max_results=1
+        )
+        
+        if resultados:
+            return resultados[0]['image'] # Devuelve el enlace directo a la imagen
+        return None
     except Exception as e:
-        print(f"Error generando imagen con Cloudflare: {e}")
+        print(f"Error buscando imagen: {e}")
         return None
 
 historiales = {}
@@ -89,6 +88,7 @@ HTML = """
         .mensaje-usuario { align-self: flex-end; background: #4aa3df; color: white; border-bottom-right-radius: 2px; }
         .mensaje-miku { align-self: flex-start; background: #f0f7ff; color: #1b3a4b; border-bottom-left-radius: 2px; border: 1px solid #dff5ff; }
         .mensaje-miku b { color: #2a6f97; }
+        .mensaje-miku img { display: block; max-width: 100%; border-radius: 10px; margin-top: 10px; }
         .input-area { padding: 15px; padding-bottom: 25px; border-top: 1px solid #eee; display: flex; gap: 10px; background: #fafafa; }
         input { flex: 1; padding: 15px; border-radius: 30px; border: 1px solid #ddd; outline: none; font-size: 1rem; transition: 0.3s; }
         input:focus { border-color: #4aa3df; box-shadow: 0 0 0 3px rgba(74, 163, 223, 0.2); }
@@ -133,7 +133,7 @@ HTML = """
             chat.scrollTop = chat.scrollHeight;
 
             const idPensando = 'pensando-' + Date.now();
-            chat.innerHTML += `<div class="mensaje mensaje-miku" id="${idPensando}"><b>Miku:</b> Creando imagen... 🎨</div>`;
+            chat.innerHTML += `<div class="mensaje mensaje-miku" id="${idPensando}"><b>Miku:</b> Investigando y buscando imagen... 🔍</div>`;
             chat.scrollTop = chat.scrollHeight;
 
             const response = await fetch('/responder', {
@@ -145,14 +145,11 @@ HTML = """
             
             let respuestaFormateada = data.respuesta;
             
-            if (respuestaFormateada.includes("[IMAGEN]")) {
-                const url = respuestaFormateada.split("[IMAGEN]")[1].split("[/IMAGEN]")[0];
-                let texto = respuestaFormateada.split("[IMAGEN]")[0];
-                texto = texto.replace("[CREANDO]", "");
-                document.getElementById(idPensando).innerHTML = `<b>Miku:</b> ${texto}<br><img src="${url}" style="max-width: 100%; border-radius: 10px; margin-top: 10px;">`;
-            } else {
-                document.getElementById(idPensando).innerHTML = `<b>Miku:</b> ${respuestaFormateada}`;
+            if (data.imagen) {
+                respuestaFormateada += `<br><a href="${data.imagen}" target="_blank">📸 Ver imagen relacionada</a><br><img src="${data.imagen}" style="max-width: 100%; border-radius: 10px; margin-top: 10px;">`;
             }
+            
+            document.getElementById(idPensando).innerHTML = `<b>Miku:</b> ${respuestaFormateada}`;
             chat.scrollTop = chat.scrollHeight;
         }
     </script>
@@ -190,15 +187,8 @@ def responder():
     user_id = session['user_id']
     
     texto_lower = mensaje.lower()
-    if any(palabra in texto_lower for palabra in ["genera una imagen", "crea una imagen", "dibuja", "dibújame", "hazme una imagen", "haz una imagen", "hazme la imagen", "quiero una imagen", "imagen de", "genera", "crea", "dibujo"]):
-        prompt = texto_lower.replace("miku", "").replace("genera una imagen", "").replace("crea una imagen", "").replace("dibuja", "").replace("dibújame", "").replace("hazme una imagen", "").replace("haz una imagen", "").replace("hazme la imagen", "").replace("quiero una imagen", "").replace("imagen de", "").strip()
-        if prompt:
-            url_imagen = generar_imagen(prompt)
-            if url_imagen:
-                return jsonify({"respuesta": f"[CREANDO]¡Claro! Dame un momento, estoy creando tu imagen... 🎨[IMAGEN]{url_imagen}[/IMAGEN]"})
-            else:
-                return jsonify({"respuesta": "Lo siento, tuve un problema al generar la imagen. Intenta de nuevo."})
-
+    
+    # --- CONVERSACIÓN CON GROQ ---
     if user_id not in historiales:
         historiales[user_id] = [
             {"role": "system", "content": "Eres Miku Nakano. Tu personalidad es dulce, cálida, amable y un poco tímida. IMPORTANTE: No uses apelativos como 'Director' ni 'Tú' a menos que te lo pidan. Responde en español de forma concisa y cariñosa."}
@@ -206,6 +196,7 @@ def responder():
     
     historial_chat = historiales[user_id]
     
+    # --- BÚSQUEDA EN INTERNET SI ES UNA INVESTIGACIÓN ---
     if "busca" in texto_lower or "investiga" in texto_lower:
         query = texto_lower.replace("miku", "").replace("busca", "").replace("investiga", "").strip()
         if query:
@@ -226,7 +217,13 @@ def responder():
         )
         respuesta = completion.choices[0].message.content
         historial_chat.append({"role": "assistant", "content": respuesta})
-        return jsonify({"respuesta": respuesta})
+        
+        # --- SI ES UNA INVESTIGACIÓN, BUSCAMOS UNA IMAGEN ---
+        imagen_url = None
+        if "investiga" in texto_lower or "resumen" in texto_lower or "tarea" in texto_lower:
+            imagen_url = buscar_imagen(query if query else mensaje)
+        
+        return jsonify({"respuesta": respuesta, "imagen": imagen_url})
     except Exception as e:
         return jsonify({"respuesta": f"Error: {e}"})
 
