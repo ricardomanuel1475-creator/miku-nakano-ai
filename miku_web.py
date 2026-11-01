@@ -8,6 +8,7 @@ import uuid
 import requests
 import re
 import time
+import urllib.parse
 
 app = Flask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1, x_prefix=1)
@@ -45,16 +46,21 @@ def limpiar_texto(texto):
     return texto.strip()
 
 # ==========================================
-# FUNCIÓN PARA BUSCAR IMÁGENES (BING)
+# FUNCIÓN PARA BUSCAR IMÁGENES (BING - FOTOS REALES)
 # ==========================================
 def buscar_imagen(tema):
     try:
-        # Limpiamos el tema para la búsqueda
+        # Limpiamos el tema y añadimos filtros para evitar memes/pósters
         tema_limpio = tema.lower().replace("resumen", "").replace("de", "").replace("la", "").replace("el", "").strip()
+        query_bing = f"{tema_limpio} historical photo documentary -text -poster -meme"
         
-        # Usamos la URL directa de Bing para obtener la imagen
-        # Esta URL es pública y no requiere descarga
-        return f"https://tse1.mm.bing.net/th?q={tema_limpio}"
+        # Codificamos la URL
+        query_encoded = urllib.parse.quote(query_bing)
+        
+        # Usamos el filtro "photo-photo" de Bing para que solo devuelva fotos reales
+        url = f"https://tse1.mm.bing.net/th?q={query_encoded}&qft=+filterui:photo-photo&w=400&h=300&c=7"
+        
+        return url
     except Exception as e:
         print(f"Error buscando imagen con Bing: {e}")
         return None
@@ -82,7 +88,7 @@ HTML = """
         .mensaje-usuario { align-self: flex-end; background: #4aa3df; color: white; border-bottom-right-radius: 2px; }
         .mensaje-miku { align-self: flex-start; background: #f0f7ff; color: #1b3a4b; border-bottom-left-radius: 2px; border: 1px solid #dff5ff; }
         .mensaje-miku b { color: #2a6f97; }
-        .mensaje-miku img { display: block; max-width: 100%; border-radius: 10px; margin-top: 10px; }
+        .mensaje-miku img { display: block; max-width: 60%; max-height: 250px; object-fit: cover; border-radius: 10px; margin-top: 10px; }
         .input-area { padding: 15px; padding-bottom: 25px; border-top: 1px solid #eee; display: flex; gap: 10px; background: #fafafa; }
         input { flex: 1; padding: 15px; border-radius: 30px; border: 1px solid #ddd; outline: none; font-size: 1rem; transition: 0.3s; }
         input:focus { border-color: #4aa3df; box-shadow: 0 0 0 3px rgba(74, 163, 223, 0.2); }
@@ -140,7 +146,7 @@ HTML = """
             let respuestaFormateada = data.respuesta;
             
             if (data.imagen) {
-                respuestaFormateada = `<img src="${data.imagen}" style="max-width: 100%; border-radius: 10px; margin-bottom: 10px;"><br>` + respuestaFormateada;
+                respuestaFormateada = `<img src="${data.imagen}" style="max-width: 60%; max-height: 250px; object-fit: cover; border-radius: 10px; margin-bottom: 10px;"><br>` + respuestaFormateada;
             }
             
             document.getElementById(idPensando).innerHTML = `<b>Miku:</b> ${respuestaFormateada}`;
