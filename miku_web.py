@@ -8,6 +8,7 @@ import uuid
 import requests
 import re
 import time
+import urllib.parse
 
 app = Flask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1, x_prefix=1)
@@ -45,47 +46,37 @@ def limpiar_texto(texto):
     return texto.strip()
 
 # ==========================================
-# FUNCIÓN PARA BUSCAR IMÁGENES EN WIKIPEDIA
+# FUNCIÓN PARA BUSCAR IMÁGENES (WIKIPEDIA + BING)
 # ==========================================
 def buscar_imagen(tema):
+    tema_limpio = tema.lower().replace("resumen", "").replace("de", "").replace("la", "").replace("el", "").strip()
+    
+    # 1. Intentamos con Wikipedia en INGLÉS
     try:
-        # Limpiamos el tema
-        tema_limpio = tema.lower().replace("resumen", "").replace("de", "").replace("la", "").replace("el", "").strip()
-        
-        # 1. Buscamos en la Wikipedia en INGLÉS (fotos históricas reales)
         url_en = "https://en.wikipedia.org/w/api.php"
         parametros = {
-            "action": "query",
-            "format": "json",
-            "formatversion": 2,
-            "prop": "pageimages",
-            "piprop": "original",
-            "titles": tema_limpio,
-            "redirects": 1
+            "action": "query", "format": "json", "formatversion": 2,
+            "prop": "pageimages", "piprop": "original", "titles": tema_limpio, "redirects": 1
         }
-        
-        response = requests.get(url_en, params=parametros, timeout=10)
+        response = requests.get(url_en, params=parametros, timeout=5)
         if response.ok:
             data = response.json()
             paginas = data.get("query", {}).get("pages", [])
             for page in paginas:
                 if "original" in page:
                     return page["original"]["source"]
-        
-        # 2. Si no encuentra el título exacto, busca en general
-        url_busqueda = f"https://en.wikipedia.org/w/api.php?action=query&format=json&formatversion=2&prop=pageimages&piprop=original&generator=search&gsrsearch={tema_limpio}&gsrlimit=1"
-        response = requests.get(url_busqueda, timeout=10)
-        if response.ok:
-            data = response.json()
-            paginas = data.get("query", {}).get("pages", [])
-            for page in paginas:
-                if "original" in page:
-                    return page["original"]["source"]
-                    
-        return None
-    except Exception as e:
-        print(f"Error buscando imagen en Wikipedia: {e}")
-        return None
+    except: pass
+
+    # 2. Si Wikipedia falla, intentamos con Bing (fotos reales, sin texto)
+    try:
+        query_bing = f"{tema_limpio} historical photo documentary"
+        query_encoded = urllib.parse.quote(query_bing)
+        # El filtro "photo-photo" evita memes y pósters
+        url_bing = f"https://tse1.mm.bing.net/th?q={query_encoded}&qft=+filterui:photo-photo&w=600&h=400&c=7"
+        return url_bing
+    except: pass
+
+    return None
 
 historiales = {}
 
