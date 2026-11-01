@@ -49,7 +49,7 @@ def limpiar_texto(texto):
 # ==========================================
 # FUNCIÓN PARA BUSCAR IMÁGENES EN WIKIMEDIA COMMONS
 # ==========================================
-def buscar_imagen_wikimedia(palabras_clave, limite=10):
+def buscar_imagen_wikimedia(palabras_clave, limite=10, es_mapa=False):
     try:
         url = "https://commons.wikimedia.org/w/api.php"
         headers = {
@@ -84,13 +84,14 @@ def buscar_imagen_wikimedia(palabras_clave, limite=10):
                 
                 if not url_imagen: continue
 
-                # --- FILTROS DE CALIDAD (AHORA PERMITE MAPAS) ---
                 es_formato_valido = url_imagen.lower().endswith(('.jpg', '.jpeg', '.png'))
-                es_alta_resolucion = ancho_original >= 600 # Bajamos un poquito el requisito para permitir mapas
+                es_alta_resolucion = ancho_original >= 500 
                 
-                # Solo bloqueamos cosas que son basura de texto, pero DEJAMOS PASAR los mapas
-                palabras_basura = ["book", "document", "scan", "text", "cover", "signature", "graph", "chart"]
-                es_basura = any(palabra in titulo_archivo for palabra in palabras_basura)
+                # Si estamos buscando un mapa, no descartamos por la palabra "map". Si no, filtramos basura.
+                if es_mapa:
+                    es_basura = any(p in titulo_archivo for p in ["book", "document", "scan", "text", "cover", "signature"])
+                else:
+                    es_basura = any(p in titulo_archivo for p in ["book", "document", "scan", "text", "cover", "signature", "graph", "chart", "logo"])
 
                 if es_formato_valido and es_alta_resolucion and not es_basura:
                     metadatos = info.get("extmetadata", {})
@@ -190,7 +191,7 @@ HTML = """
             chat.scrollTop = chat.scrollHeight;
 
             const idPensando = 'pensando-' + Date.now();
-            chat.innerHTML += `<div class="mensaje mensaje-miku" id="${idPensando}"><b>Miku:</b> Buscando imágenes y mapas en Alta Definición... 🔍</div>`;
+            chat.innerHTML += `<div class="mensaje mensaje-miku" id="${idPensando}"><b>Miku:</b> Preparando una investigación completa con 3 imágenes... 🔍</div>`;
             chat.scrollTop = chat.scrollHeight;
 
             const response = await fetch('/responder', {
@@ -241,14 +242,16 @@ def responder():
     
     if user_id not in historiales:
         historiales[user_id] = [
-            {"role": "system", "content": "Eres Miku Nakano. Tu personalidad es dulce, cálida, amable y un poco tímida. Responde en español de forma clara y útil. Cuando te pidan una investigación o resumen, sé muy detallada y estructurada. Usa texto plano y viñetas simples."}
+            {"role": "system", "content": "Eres Miku Nakano. Tu personalidad es dulce, cálida, amable y un poco tímida. Responde en español de forma clara y útil. Cuando te pidan una investigación o resumen, sé muy detallada y estructurada. Usa texto plano y viñetas simples. NO incluyas etiquetas de imágenes en tu texto."}
         ]
     
     historial_chat = historiales[user_id]
     query = ""
+    es_investigacion = False
     
-    if "busca" in texto_lower or "investiga" in texto_lower or "resumen" in texto_lower:
-        query = texto_lower.replace("miku", "").replace("busca", "").replace("investiga", "").replace("resumen", "").replace("hazme", "").replace("de", "").strip()
+    if "busca" in texto_lower or "investiga" in texto_lower or "resumen" in texto_lower or "quien" in texto_lower or "qué" in texto_lower:
+        es_investigacion = True
+        query = texto_lower.replace("miku", "").replace("busca", "").replace("investiga", "").replace("resumen", "").replace("hazme", "").replace("de", "").replace("sobre", "").replace("la", "").replace("el", "").replace("quien", "").replace("era", "").replace("qué", "").replace("es", "").strip()
         if query:
             try:
                 resultados = DDGS().text(query, max_results=3)
@@ -256,16 +259,6 @@ def responder():
                 historial_chat.append({"role": "system", "content": f"Info de internet: {info_web}"})
             except: pass
 
-    # Instrucciones actualizadas: Permite mapas y pide retratos
-    instruccion_imagenes = (
-        "IMPORTANTE: Para hacer tu respuesta más visual, añade etiquetas secretas con imágenes. "
-        "El formato exacto es: [IMG: palabras clave en inglés]. "
-        "CRÍTICO 1: Si el tema principal es un PERSONAJE o PERSONA, la PRIMERA etiqueta DEBE ser su nombre + 'portrait'. Ejemplo: [IMG: Miguel Grau portrait]. "
-        "CRÍTICO 2: Si hablas de un lugar, país, batalla o ruta, PUEDES incluir un mapa usando la palabra 'map'. Ejemplo: [IMG: Battle of Angamos map]. "
-        "CRÍTICO 3: No uses palabras genéricas como 'war', 'history' o 'people'. Usa términos fotográficos como 'landscape', 'photography', 'high resolution'. "
-        "Usa máximo 3 imágenes por respuesta (ejemplo: 1 retrato, 1 mapa, 1 foto del lugar)."
-    )
-    historial_chat.append({"role": "system", "content": instruccion_imagenes})
     historial_chat.append({"role": "user", "content": mensaje})
     
     try:
@@ -275,30 +268,97 @@ def responder():
             temperature=0.7,
             max_tokens=4000
         )
-        respuesta_cruda = completion.choices[0].message.content
+        texto_ia = completion.choices[0].message.content
+        texto_limpio = limpiar_texto(texto_ia)
         
-        patron = r'\[IMG:\s*(.*?)\]'
-        partes = re.split(patron, respuesta_cruda)
+        # --- INYECCIÓN FORZADA DE 3 IMÁGENES ---
+        imagenes_a_insertar = []
         
-        respuesta_final = ""
-        for i, parte in enumerate(partes):
-            if i % 2 == 0:
-                respuesta_final += limpiar_texto(parte) + "\n"
+        if es_investigacion and query:
+            tema_principal = query.strip()
+            
+            # 1. BÚSQUEDA 1: El protagonista / tema principal (Retrato o foto)
+            img_1 = buscar_imagen_wikimedia(tema_principal, limite=5)
+            if img_1:
+                imagenes_a_insertar.append(img_1[0])
+            
+            # 2. BÚSQUEDA 2: El Mapa (Forzado)
+            mapa_query = f"{tema_principal} map"
+            img_2 = buscar_imagen_wikimedia(mapa_query, limite=5, es_mapa=True)
+            if img_2:
+                # Evitar duplicados
+                if not any(img['url'] == img_2[0]['url'] for img in imagenes_a_insertar):
+                    imagenes_a_insertar.append(img_2[0])
             else:
-                palabras_clave = parte.strip()
-                imagenes = buscar_imagen_wikimedia(palabras_clave, limite=10)
-                
-                if imagenes:
-                    img = imagenes[0] 
-                    tarjeta = f'''
-                    <div class="tarjeta-imagen">
-                        <div class="titulo-imagen">📷 {img["nombre"]}</div>
-                        <img src="{img["url"]}" alt="{palabras_clave}">
-                        <div class="atribucion">Fuente: Wikimedia Commons | Autor: {img["autor"]} | Licencia: {img["licencia"]}</div>
-                    </div>
-                    '''
-                    respuesta_final += tarjeta + "\n"
+                # Plan B si no hay mapa: buscar una foto del lugar/evento
+                img_2_plan_b = buscar_imagen_wikimedia(f"{tema_principal} location", limite=5)
+                if img_2_plan_b and not any(img['url'] == img_2_plan_b[0]['url'] for img in imagenes_a_insertar):
+                    imagenes_a_insertar.append(img_2_plan_b[0])
+
+            # 3. BÚSQUEDA 3: Contexto o foto secundaria (Forzado)
+            # Buscamos algo relacionado con el tema pero diferente
+            contexto_query = f"{tema_principal} history"
+            img_3 = buscar_imagen_wikimedia(contexto_query, limite=10)
+            if img_3:
+                for img in img_3:
+                    if not any(existente['url'] == img['url'] for existente in imagenes_a_insertar):
+                        imagenes_a_insertar.append(img)
+                        break # Solo queremos 1 más
+                        
+            # Si aún faltan imágenes, rellenamos con búsquedas genéricas del tema
+            while len(imagenes_a_insertar) < 3:
+                relleno = buscar_imagen_wikimedia(f"{tema_principal} photography", limite=5)
+                agregado = False
+                if relleno:
+                    for img in relleno:
+                        if not any(existente['url'] == img['url'] for existente in imagenes_a_insertar):
+                            imagenes_a_insertar.append(img)
+                            agregado = True
+                            break
+                if not agregado:
+                    break # Si no encuentra más, se detiene para no hacer loop infinito
+
+        # --- CONSTRUIR LA RESPUESTA FINAL ---
+        parrafos = texto_limpio.split('\n\n')
+        respuesta_final = ""
         
+        # Insertamos las 3 imágenes distribuidas
+        for i, parrafo in enumerate(parrafos):
+            respuesta_final += parrafo + "\n\n"
+            
+            # Insertamos la primera imagen después del primer párrafo
+            if i == 0 and len(imagenes_a_insertar) > 0:
+                img = imagenes_a_insertar.pop(0)
+                respuesta_final += f'''
+                <div class="tarjeta-imagen">
+                    <div class="titulo-imagen">📷 {img["nombre"]}</div>
+                    <img src="{img["url"]}" alt="{query}">
+                    <div class="atribucion">Fuente: Wikimedia Commons | Autor: {img["autor"]} | Licencia: {img["licencia"]}</div>
+                </div>
+                ''' + "\n"
+            
+            # Insertamos la segunda imagen después del tercer párrafo (o el que siga)
+            elif i == 2 and len(imagenes_a_insertar) > 0:
+                img = imagenes_a_insertar.pop(0)
+                respuesta_final += f'''
+                <div class="tarjeta-imagen">
+                    <div class="titulo-imagen">📷 {img["nombre"]}</div>
+                    <img src="{img["url"]}" alt="{query}">
+                    <div class="atribucion">Fuente: Wikimedia Commons | Autor: {img["autor"]} | Licencia: {img["licencia"]}</div>
+                </div>
+                ''' + "\n"
+
+        # Insertamos la tercera imagen al final
+        if len(imagenes_a_insertar) > 0:
+            img = imagenes_a_insertar.pop(0)
+            respuesta_final += f'''
+            <div class="tarjeta-imagen">
+                <div class="titulo-imagen">📷 {img["nombre"]}</div>
+                <img src="{img["url"]}" alt="{query}">
+                <div class="atribucion">Fuente: Wikimedia Commons | Autor: {img["autor"]} | Licencia: {img["licencia"]}</div>
+            </div>
+            ''' + "\n"
+
         historial_chat.append({"role": "assistant", "content": respuesta_final})
         
         return jsonify({"respuesta": respuesta_final})
