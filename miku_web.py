@@ -63,7 +63,7 @@ def buscar_imagen_wikimedia(palabras_clave, limite=2):
             "gsrlimit": limite,
             "prop": "imageinfo",
             "iiprop": "url|extmetadata",
-            "iiurlwidth": "800",
+            "iiurlwidth": "800", # Pedimos a Wikimedia que nos de la imagen a 800px de ancho
             "format": "json"
         }
         
@@ -118,22 +118,44 @@ HTML = """
         .chat-header { padding: 20px; border-bottom: 1px solid #eee; color: #2a6f97; font-weight: bold; font-size: 1.2rem; display: flex; align-items: center; justify-content: space-between; }
         .user-info { font-size: 0.9rem; color: #666; }
         #chat { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 15px; }
+        
+        /* Ajustes para los mensajes */
         .mensaje { max-width: 85%; padding: 12px 16px; border-radius: 15px; line-height: 1.5; font-size: 0.95rem; white-space: pre-wrap; }
         .mensaje-usuario { align-self: flex-end; background: #4aa3df; color: white; border-bottom-right-radius: 2px; }
-        .mensaje-miku { align-self: flex-start; background: #f0f7ff; color: #1b3a4b; border-bottom-left-radius: 2px; border: 1px solid #dff5ff; }
+        
+        /* EL MENSAJE DE MIKU AHORA PUEDE CRECER MÁS PARA DAR ESPACIO A LA IMAGEN */
+        .mensaje-miku { 
+            align-self: flex-start; 
+            background: #f0f7ff; 
+            color: #1b3a4b; 
+            border-bottom-left-radius: 2px; 
+            border: 1px solid #dff5ff; 
+            width: auto; /* Deja que crezca según el contenido */
+            max-width: 90%; /* Límite para que no toque los bordes de la pantalla */
+            min-width: 250px;
+        }
         .mensaje-miku b { color: #2a6f97; }
         
-        /* CSS ACTUALIZADO PARA QUE LAS IMÁGENES NO SE RECORTEN */
-        .tarjeta-imagen { background: #fff; border-radius: 8px; padding: 10px; margin: 15px 0; border: 1px solid #e0e0e0; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        /* Ajustes para que la tarjeta de la imagen ocupe todo el espacio disponible */
+        .tarjeta-imagen { 
+            background: #fff; 
+            border-radius: 8px; 
+            padding: 10px; 
+            margin: 15px 0; 
+            border: 1px solid #e0e0e0; 
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05); 
+            width: 100%; /* Ocupa todo el ancho del mensaje */
+            display: block;
+        }
         .titulo-imagen { font-weight: bold; color: #2a6f97; font-size: 0.9rem; margin-bottom: 8px; text-transform: capitalize; }
         
         .tarjeta-imagen img { 
             display: block; 
-            width: 100%; 
+            width: 100%; /* Ocupa todo el ancho de la tarjeta */
             height: auto; 
-            max-height: 450px; /* Límite máximo para que no se haga gigante */
-            object-fit: contain; /* ESTO HACE QUE SE VEA COMPLETA SIN RECORTAR */
-            background-color: #f8f9fa; /* Fondo gris claro por si la foto es vertical */
+            max-height: 600px; /* Aumentamos el límite de altura */
+            object-fit: contain; 
+            background-color: #f8f9fa; 
             border-radius: 5px; 
             margin: 0 auto; 
             border: 1px solid #eee;
@@ -146,12 +168,14 @@ HTML = """
         input:focus { border-color: #4aa3df; box-shadow: 0 0 0 3px rgba(74, 163, 223, 0.2); }
         button { padding: 15px 30px; background: #4aa3df; color: white; border: none; border-radius: 30px; cursor: pointer; font-weight: bold; transition: 0.3s; }
         button:hover { background: #2a6f97; }
+        
         @media (max-width: 768px) {
             body { flex-direction: column; }
             .sidebar { width: 100%; height: 180px; flex-direction: row; padding: 10px; }
             .sidebar img { max-width: 120px; }
             .sidebar h2 { font-size: 1.2rem; margin-top: 0; margin-left: 15px; }
             .mensaje { max-width: 95%; }
+            .mensaje-miku { max-width: 100%; }
         }
     </style>
 </head>
