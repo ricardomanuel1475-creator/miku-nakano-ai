@@ -48,40 +48,41 @@ def limpiar_texto(texto):
     return texto.strip()
 
 # ==========================================
-# FUNCIÓN PARA BUSCAR IMÁGENES
+# FUNCIÓN PARA BUSCAR IMÁGENES EN WIKIPEDIA
 # ==========================================
 def buscar_imagen(tema):
     try:
-        # Extraemos las palabras clave en inglés
-        instrucciones = f"Extract the main topic of this research in English, just 3 or 4 keywords, no explanations. Research: '{tema}'"
-        completion = cliente.chat.completions.create(
-            model="openai/gpt-oss-120b",
-            messages=[{"role": "user", "content": instrucciones}],
-            temperature=0.3,
-            max_tokens=50
-        )
-        palabras_clave = completion.choices[0].message.content.strip().replace('"', '')
-        if not palabras_clave:
-            palabras_clave = tema
+        # 1. Buscamos el artículo exacto en inglés
+        url_busqueda = "https://en.wikipedia.org/w/api.php"
+        parametros = {
+            "action": "query",
+            "format": "json",
+            "prop": "pageimages",
+            "piprop": "original",
+            "titles": tema,
+            "redirects": 1
+        }
         
-        # Buscamos la imagen con reintentos
-        for intento in range(3):
-            try:
-                resultados = DDGS().images(
-                    keywords=palabras_clave,
-                    region="wt-wt",
-                    safesearch="moderate",
-                    size="Large",
-                    max_results=1
-                )
-                if resultados:
-                    return resultados[0]['image']
-            except Exception as e:
-                print(f"Error buscando imagen (intento {intento+1}): {e}")
-                time.sleep(2)
+        response = requests.get(url_busqueda, params=parametros, timeout=10)
+        data = response.json()
+        
+        paginas = data.get("query", {}).get("pages", {})
+        for page_id, page_info in paginas.items():
+            if "original" in page_info:
+                return page_info["original"]["source"]
+        
+        # 2. Si no encuentra el título exacto, usa la búsqueda general
+        url_general = f"https://en.wikipedia.org/w/api.php?action=query&format=json&prop=pageimages&piprop=original&generator=search&gsrsearch={tema}&gsrlimit=1"
+        response = requests.get(url_general, timeout=10)
+        data = response.json()
+        paginas = data.get("query", {}).get("pages", {})
+        for page_id, page_info in paginas.items():
+            if "original" in page_info:
+                return page_info["original"]["source"]
+                
         return None
     except Exception as e:
-        print(f"Error extrayendo palabras clave: {e}")
+        print(f"Error buscando imagen en Wikipedia: {e}")
         return None
 
 historiales = {}
@@ -237,7 +238,7 @@ def responder():
             max_tokens=4000
         )
         respuesta = completion.choices[0].message.content
-        respuesta_limpia = limpiar_texto(respuesta) # <-- AQUÍ LIMPIAMOS EL TEXTO
+        respuesta_limpia = limpiar_texto(respuesta) # Limpiamos el texto
         historial_chat.append({"role": "assistant", "content": respuesta_limpia})
         
         # --- BUSCAR IMAGEN SI ES UNA INVESTIGACIÓN O RESUMEN ---
