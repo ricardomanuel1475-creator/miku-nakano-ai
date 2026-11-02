@@ -49,12 +49,17 @@ def limpiar_texto(texto):
 # ==========================================
 # FUNCIÓN PARA BUSCAR IMÁGENES EN WIKIMEDIA COMMONS
 # ==========================================
-def buscar_imagen_wikimedia(palabras_clave, limite=2):
+def buscar_imagen_wikimedia(palabras_clave, limite=5, es_mapa=False):
     try:
         url = "https://commons.wikimedia.org/w/api.php"
         headers = {
             "User-Agent": "MikuNakanoAI/1.0 (https://miku-nakano-ai.onrender.com; contacto@ejemplo.com)"
         }
+        
+        # Si es mapa, forzamos la palabra map
+        if es_mapa and "map" not in palabras_clave.lower():
+            palabras_clave += " map"
+            
         params = {
             "action": "query",
             "generator": "search",
@@ -62,7 +67,7 @@ def buscar_imagen_wikimedia(palabras_clave, limite=2):
             "gsrnamespace": "6",
             "gsrlimit": limite,
             "prop": "imageinfo",
-            "iiprop": "url|extmetadata",
+            "iiprop": "url|size|extmetadata",
             "iiurlwidth": "800",
             "format": "json"
         }
@@ -75,13 +80,22 @@ def buscar_imagen_wikimedia(palabras_clave, limite=2):
             
             imagenes_encontradas = []
             for page_id, pagina in paginas.items():
-                titulo_archivo = pagina.get("title", "")
-                nombre_limpio = titulo_archivo.replace("File:", "").rsplit('.', 1)[0].replace('_', ' ')
+                titulo_archivo = pagina.get("title", "").lower()
+                nombre_limpio = titulo_archivo.replace("file:", "").rsplit('.', 1)[0].replace('_', ' ')
                 
                 info = pagina.get("imageinfo", [{}])[0]
                 url_imagen = info.get("thumburl") or info.get("url")
+                ancho_original = info.get("width", 0)
                 
-                if url_imagen and not url_imagen.lower().endswith(('.svg', '.tiff')):
+                if not url_imagen: continue
+
+                # FILTROS: Solo JPG/PNG, mínimo 500px de ancho, sin libros ni escaneos
+                es_formato_valido = url_imagen.lower().endswith(('.jpg', '.jpeg', '.png'))
+                es_alta_resolucion = ancho_original >= 500
+                palabras_basura = ["book", "document", "scan", "text", "cover", "signature", "graph", "chart"]
+                es_basura = any(palabra in titulo_archivo for palabra in palabras_basura)
+
+                if es_formato_valido and es_alta_resolucion and not es_basura:
                     metadatos = info.get("extmetadata", {})
                     licencia = metadatos.get("LicenseShortName", {}).get("value", "Ver en Commons")
                     autor = metadatos.get("Artist", {}).get("value", "Desconocido")
@@ -120,10 +134,9 @@ HTML = """
         #chat { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 15px; }
         .mensaje { max-width: 85%; padding: 12px 16px; border-radius: 15px; line-height: 1.5; font-size: 0.95rem; white-space: pre-wrap; }
         .mensaje-usuario { align-self: flex-end; background: #4aa3df; color: white; border-bottom-right-radius: 2px; }
-        .mensaje-miku { align-self: flex-start; background: #f0f7ff; color: #1b3a4b; border-bottom-left-radius: 2px; border: 1px solid #dff5ff; }
+        .mensaje-miku { align-self: flex-start; background: #f0f7ff; color: #1b3a4b; border-bottom-left-radius: 2px; border: 1px solid #dff5ff; width: auto; max-width: 90%; }
         .mensaje-miku b { color: #2a6f97; }
         
-        /* CSS ACTUALIZADO PARA QUE LAS IMÁGENES NO SE RECORTEN */
         .tarjeta-imagen { background: #fff; border-radius: 8px; padding: 10px; margin: 15px 0; border: 1px solid #e0e0e0; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
         .titulo-imagen { font-weight: bold; color: #2a6f97; font-size: 0.9rem; margin-bottom: 8px; text-transform: capitalize; }
         
@@ -131,9 +144,9 @@ HTML = """
             display: block; 
             width: 100%; 
             height: auto; 
-            max-height: 450px; /* Límite máximo para que no se haga gigante */
-            object-fit: contain; /* ESTO HACE QUE SE VEA COMPLETA SIN RECORTAR */
-            background-color: #f8f9fa; /* Fondo gris claro por si la foto es vertical */
+            max-height: 450px; 
+            object-fit: contain; 
+            background-color: #f8f9fa; 
             border-radius: 5px; 
             margin: 0 auto; 
             border: 1px solid #eee;
@@ -152,6 +165,7 @@ HTML = """
             .sidebar img { max-width: 120px; }
             .sidebar h2 { font-size: 1.2rem; margin-top: 0; margin-left: 15px; }
             .mensaje { max-width: 95%; }
+            .mensaje-miku { max-width: 100%; }
         }
     </style>
 </head>
@@ -242,9 +256,13 @@ def responder():
     
     historial_chat = historiales[user_id]
     query = ""
+    es_investigacion = False
     
-    if "busca" in texto_lower or "investiga" in texto_lower or "resumen" in texto_lower:
-        query = texto_lower.replace("miku", "").replace("busca", "").replace("investiga", "").replace("resumen", "").replace("hazme", "").replace("de", "").strip()
+    # Limpiamos la query para tener el tema principal
+    if "busca" in texto_lower or "investiga" in texto_lower or "resumen" in texto_lower or "quien" in texto_lower or "qué" in texto_lower:
+        es_investigacion = True
+        query = texto_lower.replace("miku", "").replace("busca", "").replace("investiga", "").replace("resumen", "").replace("hazme", "").replace("de", "").replace("sobre", "").replace("la", "").replace("el", "").replace("quien", "").replace("era", "").replace("qué", "").replace("es", "").strip()
+        
         if query:
             try:
                 resultados = DDGS().text(query, max_results=3)
@@ -252,14 +270,15 @@ def responder():
                 historial_chat.append({"role": "system", "content": f"Info de internet: {info_web}"})
             except: pass
 
+    # PROMPT ESTRICTO: Forzamos 3 imágenes exactas
     instruccion_imagenes = (
-        "IMPORTANTE: Para hacer tu respuesta más visual, añade etiquetas secretas con imágenes. "
+        "IMPORTANTE: Al final de cada sección de tu respuesta, añade etiquetas secretas con imágenes. "
         "El formato exacto es: [IMG: palabras clave en inglés]. "
-        "CRÍTICO: Usa palabras clave MUY ESPECÍFICAS y en inglés (mínimo 3 palabras). "
-        "No uses palabras genéricas como 'war', 'history' o 'people'. "
-        "Ejemplo correcto: [IMG: World War II Normandy landings tanks]. "
-        "Ejemplo incorrecto: [IMG: war]. "
-        "Usa máximo 2 imágenes por respuesta, colocadas justo después del párrafo al que se refieren."
+        "CRÍTICO: Debes usar EXACTAMENTE 3 etiquetas en toda tu respuesta. "
+        "1. [IMG: nombre del tema principal portrait] (para el personaje o tema principal) "
+        "2. [IMG: nombre del tema principal map] (para un mapa) "
+        "3. [IMG: nombre del tema principal landscape] (para una foto del lugar) "
+        "No uses palabras genéricas como 'war' o 'history'. Usa términos específicos en inglés."
     )
     historial_chat.append({"role": "system", "content": instruccion_imagenes})
     historial_chat.append({"role": "user", "content": mensaje})
@@ -273,28 +292,72 @@ def responder():
         )
         respuesta_cruda = completion.choices[0].message.content
         
+        # Extraemos las etiquetas que puso la IA
         patron = r'\[IMG:\s*(.*?)\]'
         partes = re.split(patron, respuesta_cruda)
         
         respuesta_final = ""
+        imagenes_insertadas_urls = [] # Para no repetir imágenes
+        
         for i, parte in enumerate(partes):
             if i % 2 == 0:
+                # Texto normal
                 respuesta_final += limpiar_texto(parte) + "\n"
             else:
+                # Etiqueta de imagen
                 palabras_clave = parte.strip()
-                imagenes = buscar_imagen_wikimedia(palabras_clave, limite=1)
+                # Buscamos hasta 5 para saltarnos la basura
+                imagenes = buscar_imagen_wikimedia(palabras_clave, limite=5, es_mapa=("map" in palabras_clave.lower()))
                 
-                if imagenes:
-                    img = imagenes[0]
-                    tarjeta = f'''
-                    <div class="tarjeta-imagen">
-                        <div class="titulo-imagen">📷 {img["nombre"]}</div>
-                        <img src="{img["url"]}" alt="{palabras_clave}">
-                        <div class="atribucion">Fuente: Wikimedia Commons | Autor: {img["autor"]} | Licencia: {img["licencia"]}</div>
-                    </div>
-                    '''
-                    respuesta_final += tarjeta + "\n"
-        
+                for img in imagenes:
+                    # Si no hemos usado esta imagen aún
+                    if img["url"] not in imagenes_insertadas_urls:
+                        tarjeta = f'''
+                        <div class="tarjeta-imagen">
+                            <div class="titulo-imagen">📷 {img["nombre"]}</div>
+                            <img src="{img["url"]}" alt="{palabras_clave}">
+                            <div class="atribucion">Fuente: Wikimedia Commons | Autor: {img["autor"]} | Licencia: {img["licencia"]}</div>
+                        </div>
+                        '''
+                        respuesta_final += tarjeta + "\n"
+                        imagenes_insertadas_urls.append(img["url"])
+                        break # Solo ponemos 1 imagen por etiqueta
+
+        # --- RED DE SEGURIDAD ---
+        # Si la IA no puso 3 imágenes, las forzamos al final para asegurar las 3
+        if len(imagenes_insertadas_urls) < 3 and es_investigacion and query:
+            respuesta_final += "\n<h3>📸 Imágenes adicionales de la investigación:</h3>\n"
+            
+            # 1. Retrato/Tema principal
+            if len(imagenes_insertadas_urls) < 3:
+                img1 = buscar_imagen_wikimedia(f"{query} portrait", limite=5)
+                if img1:
+                    for i in img1:
+                        if i["url"] not in imagenes_insertadas_urls:
+                            respuesta_final += f'''<div class="tarjeta-imagen"><div class="titulo-imagen">📷 {i["nombre"]}</div><img src="{i["url"]}" alt="Tema"><div class="atribucion">Fuente: Wikimedia Commons | Autor: {i["autor"]} | Licencia: {i["licencia"]}</div></div>\n'''
+                            imagenes_insertadas_urls.append(i["url"])
+                            break
+            
+            # 2. Mapa
+            if len(imagenes_insertadas_urls) < 3:
+                img2 = buscar_imagen_wikimedia(f"{query}", limite=5, es_mapa=True)
+                if img2:
+                    for i in img2:
+                        if i["url"] not in imagenes_insertadas_urls:
+                            respuesta_final += f'''<div class="tarjeta-imagen"><div class="titulo-imagen">📷 {i["nombre"]}</div><img src="{i["url"]}" alt="Mapa"><div class="atribucion">Fuente: Wikimedia Commons | Autor: {i["autor"]} | Licencia: {i["licencia"]}</div></div>\n'''
+                            imagenes_insertadas_urls.append(i["url"])
+                            break
+
+            # 3. Contexto / Lugar
+            if len(imagenes_insertadas_urls) < 3:
+                img3 = buscar_imagen_wikimedia(f"{query} landscape", limite=5)
+                if img3:
+                    for i in img3:
+                        if i["url"] not in imagenes_insertadas_urls:
+                            respuesta_final += f'''<div class="tarjeta-imagen"><div class="titulo-imagen">📷 {i["nombre"]}</div><img src="{i["url"]}" alt="Lugar"><div class="atribucion">Fuente: Wikimedia Commons | Autor: {i["autor"]} | Licencia: {i["licencia"]}</div></div>\n'''
+                            imagenes_insertadas_urls.append(i["url"])
+                            break
+
         historial_chat.append({"role": "assistant", "content": respuesta_final})
         
         return jsonify({"respuesta": respuesta_final})
