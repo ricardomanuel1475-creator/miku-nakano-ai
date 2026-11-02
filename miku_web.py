@@ -52,11 +52,8 @@ def limpiar_texto(texto):
 def buscar_imagen_wikimedia(palabras_clave, limite=5, es_mapa=False):
     try:
         url = "https://commons.wikimedia.org/w/api.php"
-        headers = {
-            "User-Agent": "MikuNakanoAI/1.0 (https://miku-nakano-ai.onrender.com; contacto@ejemplo.com)"
-        }
+        headers = {"User-Agent": "MikuNakanoAI/1.0 (contacto@ejemplo.com)"}
         
-        # Si es mapa, forzamos la palabra map
         if es_mapa and "map" not in palabras_clave.lower():
             palabras_clave += " map"
             
@@ -89,7 +86,6 @@ def buscar_imagen_wikimedia(palabras_clave, limite=5, es_mapa=False):
                 
                 if not url_imagen: continue
 
-                # FILTROS: Solo JPG/PNG, mínimo 500px de ancho, sin libros ni escaneos
                 es_formato_valido = url_imagen.lower().endswith(('.jpg', '.jpeg', '.png'))
                 es_alta_resolucion = ancho_original >= 500
                 palabras_basura = ["book", "document", "scan", "text", "cover", "signature", "graph", "chart"]
@@ -110,7 +106,7 @@ def buscar_imagen_wikimedia(palabras_clave, limite=5, es_mapa=False):
             return imagenes_encontradas
         return []
     except Exception as e:
-        print(f"Error buscando imagen en Wikimedia Commons: {e}")
+        print(f"Error buscando imagen: {e}")
         return []
 
 historiales = {}
@@ -141,15 +137,9 @@ HTML = """
         .titulo-imagen { font-weight: bold; color: #2a6f97; font-size: 0.9rem; margin-bottom: 8px; text-transform: capitalize; }
         
         .tarjeta-imagen img { 
-            display: block; 
-            width: 100%; 
-            height: auto; 
-            max-height: 450px; 
-            object-fit: contain; 
-            background-color: #f8f9fa; 
-            border-radius: 5px; 
-            margin: 0 auto; 
-            border: 1px solid #eee;
+            display: block; width: 100%; height: auto; max-height: 450px; 
+            object-fit: contain; background-color: #f8f9fa; border-radius: 5px; 
+            margin: 0 auto; border: 1px solid #eee;
         }
         
         .atribucion { font-size: 0.75rem; color: #666; margin-top: 8px; font-style: italic; border-top: 1px solid #eee; padding-top: 5px; }
@@ -200,7 +190,7 @@ HTML = """
             chat.scrollTop = chat.scrollHeight;
 
             const idPensando = 'pensando-' + Date.now();
-            chat.innerHTML += `<div class="mensaje mensaje-miku" id="${idPensando}"><b>Miku:</b> Investigando y buscando imágenes exactas... 🔍</div>`;
+            chat.innerHTML += `<div class="mensaje mensaje-miku" id="${idPensando}"><b>Miku:</b> Investigando y distribuyendo imágenes... 🔍</div>`;
             chat.scrollTop = chat.scrollHeight;
 
             const response = await fetch('/responder', {
@@ -258,7 +248,6 @@ def responder():
     query = ""
     es_investigacion = False
     
-    # Limpiamos la query para tener el tema principal
     if "busca" in texto_lower or "investiga" in texto_lower or "resumen" in texto_lower or "quien" in texto_lower or "qué" in texto_lower:
         es_investigacion = True
         query = texto_lower.replace("miku", "").replace("busca", "").replace("investiga", "").replace("resumen", "").replace("hazme", "").replace("de", "").replace("sobre", "").replace("la", "").replace("el", "").replace("quien", "").replace("era", "").replace("qué", "").replace("es", "").strip()
@@ -270,17 +259,13 @@ def responder():
                 historial_chat.append({"role": "system", "content": f"Info de internet: {info_web}"})
             except: pass
 
-    # PROMPT ESTRICTO: Forzamos 3 imágenes exactas
-    instruccion_imagenes = (
-        "IMPORTANTE: Al final de cada sección de tu respuesta, añade etiquetas secretas con imágenes. "
-        "El formato exacto es: [IMG: palabras clave en inglés]. "
-        "CRÍTICO: Debes usar EXACTAMENTE 3 etiquetas en toda tu respuesta. "
-        "1. [IMG: nombre del tema principal portrait] (para el personaje o tema principal) "
-        "2. [IMG: nombre del tema principal map] (para un mapa) "
-        "3. [IMG: nombre del tema principal landscape] (para una foto del lugar) "
-        "No uses palabras genéricas como 'war' o 'history'. Usa términos específicos en inglés."
+    # PROMPT: Le pedimos que divida la respuesta en secciones claras con saltos de línea dobles
+    instruccion_texto = (
+        "Escribe una investigación muy detallada y estructurada. "
+        "Divide tu respuesta en al menos 4 párrafos separados por un doble salto de línea (\\n\\n). "
+        "NO incluyas etiquetas de imágenes en tu texto."
     )
-    historial_chat.append({"role": "system", "content": instruccion_imagenes})
+    historial_chat.append({"role": "system", "content": instruccion_texto})
     historial_chat.append({"role": "user", "content": mensaje})
     
     try:
@@ -290,73 +275,64 @@ def responder():
             temperature=0.7,
             max_tokens=4000
         )
-        respuesta_cruda = completion.choices[0].message.content
+        texto_crudo = completion.choices[0].message.content
         
-        # Extraemos las etiquetas que puso la IA
-        patron = r'\[IMG:\s*(.*?)\]'
-        partes = re.split(patron, respuesta_cruda)
+        # Limpiamos cualquier etiqueta que la IA haya puesto por error
+        texto_limpio = re.sub(r'\[IMG:\s*(.*?)\]', '', texto_crudo)
+        texto_limpio = limpiar_texto(texto_limpio)
         
-        respuesta_final = ""
-        imagenes_insertadas_urls = [] # Para no repetir imágenes
+        # --- BUSCAMOS LAS 3 IMÁGENES ---
+        imagenes_a_insertar = []
         
-        for i, parte in enumerate(partes):
-            if i % 2 == 0:
-                # Texto normal
-                respuesta_final += limpiar_texto(parte) + "\n"
-            else:
-                # Etiqueta de imagen
-                palabras_clave = parte.strip()
-                # Buscamos hasta 5 para saltarnos la basura
-                imagenes = buscar_imagen_wikimedia(palabras_clave, limite=5, es_mapa=("map" in palabras_clave.lower()))
-                
-                for img in imagenes:
-                    # Si no hemos usado esta imagen aún
-                    if img["url"] not in imagenes_insertadas_urls:
-                        tarjeta = f'''
-                        <div class="tarjeta-imagen">
-                            <div class="titulo-imagen">📷 {img["nombre"]}</div>
-                            <img src="{img["url"]}" alt="{palabras_clave}">
-                            <div class="atribucion">Fuente: Wikimedia Commons | Autor: {img["autor"]} | Licencia: {img["licencia"]}</div>
-                        </div>
-                        '''
-                        respuesta_final += tarjeta + "\n"
-                        imagenes_insertadas_urls.append(img["url"])
-                        break # Solo ponemos 1 imagen por etiqueta
-
-        # --- RED DE SEGURIDAD ---
-        # Si la IA no puso 3 imágenes, las forzamos al final para asegurar las 3
-        if len(imagenes_insertadas_urls) < 3 and es_investigacion and query:
-            respuesta_final += "\n<h3>📸 Imágenes adicionales de la investigación:</h3>\n"
-            
-            # 1. Retrato/Tema principal
-            if len(imagenes_insertadas_urls) < 3:
-                img1 = buscar_imagen_wikimedia(f"{query} portrait", limite=5)
-                if img1:
-                    for i in img1:
-                        if i["url"] not in imagenes_insertadas_urls:
-                            respuesta_final += f'''<div class="tarjeta-imagen"><div class="titulo-imagen">📷 {i["nombre"]}</div><img src="{i["url"]}" alt="Tema"><div class="atribucion">Fuente: Wikimedia Commons | Autor: {i["autor"]} | Licencia: {i["licencia"]}</div></div>\n'''
-                            imagenes_insertadas_urls.append(i["url"])
-                            break
+        if es_investigacion and query:
+            # 1. Retrato / Tema principal
+            img1 = buscar_imagen_wikimedia(f"{query} portrait", limite=5)
+            if img1: imagenes_a_insertar.append(img1[0])
             
             # 2. Mapa
-            if len(imagenes_insertadas_urls) < 3:
-                img2 = buscar_imagen_wikimedia(f"{query}", limite=5, es_mapa=True)
-                if img2:
-                    for i in img2:
-                        if i["url"] not in imagenes_insertadas_urls:
-                            respuesta_final += f'''<div class="tarjeta-imagen"><div class="titulo-imagen">📷 {i["nombre"]}</div><img src="{i["url"]}" alt="Mapa"><div class="atribucion">Fuente: Wikimedia Commons | Autor: {i["autor"]} | Licencia: {i["licencia"]}</div></div>\n'''
-                            imagenes_insertadas_urls.append(i["url"])
-                            break
-
+            img2 = buscar_imagen_wikimedia(f"{query}", limite=5, es_mapa=True)
+            if img2 and not any(e['url'] == img2[0]['url'] for e in imagenes_a_insertar):
+                imagenes_a_insertar.append(img2[0])
+            
             # 3. Contexto / Lugar
-            if len(imagenes_insertadas_urls) < 3:
-                img3 = buscar_imagen_wikimedia(f"{query} landscape", limite=5)
-                if img3:
-                    for i in img3:
-                        if i["url"] not in imagenes_insertadas_urls:
-                            respuesta_final += f'''<div class="tarjeta-imagen"><div class="titulo-imagen">📷 {i["nombre"]}</div><img src="{i["url"]}" alt="Lugar"><div class="atribucion">Fuente: Wikimedia Commons | Autor: {i["autor"]} | Licencia: {i["licencia"]}</div></div>\n'''
-                            imagenes_insertadas_urls.append(i["url"])
-                            break
+            img3 = buscar_imagen_wikimedia(f"{query} landscape", limite=5)
+            if img3 and not any(e['url'] == img3[0]['url'] for e in imagenes_a_insertar):
+                imagenes_a_insertar.append(img3[0])
+
+        # --- DISTRIBUCIÓN ESTRATÉGICA ---
+        # Partimos el texto en párrafos usando los saltos de línea dobles
+        parrafos = [p for p in texto_limpio.split('\n\n') if p.strip()]
+        
+        respuesta_final = ""
+        
+        # Función auxiliar para crear la tarjeta HTML
+        def crear_tarjeta(img, palabras_clave="Imagen"):
+            return f'''
+            <div class="tarjeta-imagen">
+                <div class="titulo-imagen">📷 {img["nombre"]}</div>
+                <img src="{img["url"]}" alt="{palabras_clave}">
+                <div class="atribucion">Fuente: Wikimedia Commons | Autor: {img["autor"]} | Licencia: {img["licencia"]}</div>
+            </div>
+            '''
+
+        # Recorremos los párrafos e inyectamos imágenes en posiciones clave
+        for i, parrafo in enumerate(parrafos):
+            respuesta_final += parrafo + "\n\n"
+            
+            # Posición 1: Después del primer párrafo (Introducción)
+            if i == 0 and len(imagenes_a_insertar) > 0:
+                img = imagenes_a_insertar.pop(0)
+                respuesta_final += crear_tarjeta(img, query) + "\n"
+            
+            # Posición 2: Después del tercer párrafo (Desarrollo)
+            elif i == 2 and len(imagenes_a_insertar) > 0:
+                img = imagenes_a_insertar.pop(0)
+                respuesta_final += crear_tarjeta(img, query) + "\n"
+
+        # Si por alguna razón quedaron imágenes sin insertar (texto muy corto), las ponemos al final
+        while imagenes_a_insertar:
+            img = imagenes_a_insertar.pop(0)
+            respuesta_final += crear_tarjeta(img, query) + "\n"
 
         historial_chat.append({"role": "assistant", "content": respuesta_final})
         
