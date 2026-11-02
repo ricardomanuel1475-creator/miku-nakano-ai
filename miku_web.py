@@ -9,7 +9,6 @@ import requests
 import re
 import time
 import json
-import urllib.parse
 
 app = Flask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1, x_prefix=1)
@@ -189,7 +188,7 @@ HTML = """
             chat.scrollTop = chat.scrollHeight;
 
             const idPensando = 'pensando-' + Date.now();
-            chat.innerHTML += `<div class="mensaje mensaje-miku" id="${idPensando}"><b>Miku:</b> Investigando y decidiendo dónde colocar las imágenes... 🔍</div>`;
+            chat.innerHTML += `<div class="mensaje mensaje-miku" id="${idPensando}"><b>Miku:</b> Investigando y buscando imágenes exactas... 🔍</div>`;
             chat.scrollTop = chat.scrollHeight;
 
             const response = await fetch('/responder', {
@@ -255,17 +254,16 @@ def responder():
                 historial_chat.append({"role": "system", "content": f"Info de internet: {info_web}"})
             except: pass
 
-    # PROMPT MAESTRO: La IA decide cuántas imágenes poner, dónde ponerlas y qué buscar
+    # INSTRUCCIÓN MEJORADA: Enfocada 100% en la relación con el tema
     instruccion_imagenes = (
-        "INSTRUCCIÓN DE IMÁGENES: Mientras escribes tu respuesta, decide de forma inteligente dónde colocar imágenes "
-        "para que la investigación se vea profesional. "
-        "Debes insertar entre 2 y 4 imágenes dependiendo de lo que necesite el texto. "
-        "Usa el formato exacto: [IMG: palabras clave en inglés]. "
-        "Coloca la etiqueta JUSTO DESPUÉS del párrafo al que hace referencia la imagen. "
-        "Si hablas de un personaje, usa su nombre + 'portrait'. "
-        "Si hablas de un lugar o batalla, usa 'map' para un mapa o 'landscape' para una foto del lugar. "
-        "NUNCA uses palabras como 'book', 'document' o 'scan'. "
-        "Usa palabras clave muy específicas en inglés."
+        "IMPORTANTE: Para hacer tu respuesta más visual, añade etiquetas secretas con imágenes donde consideres necesario. "
+        "El formato exacto es: [IMG: palabras clave en inglés]. "
+        "CRÍTICO 1: Usa palabras clave MUY ESPECÍFICAS y en inglés. "
+        "CRÍTICO 2: Si hablas de un PERSONAJE, usa su nombre + 'portrait'. Ejemplo: [IMG: Miguel Grau portrait]. "
+        "CRÍTICO 3: Si hablas de un LUGAR, BATALLA o PAÍS, usa el nombre + 'map' o 'landscape'. Ejemplo: [IMG: Battle of Angamos map]. "
+        "CRÍTICO 4: NUNCA uses palabras genéricas como 'war', 'history' o 'people'. "
+        "CRÍTICO 5: NUNCA uses la palabra 'book', 'document' o 'scan' en tus búsquedas. "
+        "Usa 2 imágenes por respuesta, colocadas justo después del párrafo al que se refieren."
     )
     historial_chat.append({"role": "system", "content": instruccion_imagenes})
     historial_chat.append({"role": "user", "content": mensaje})
@@ -283,45 +281,25 @@ def responder():
         partes = re.split(patron, respuesta_cruda)
         
         respuesta_final = ""
-        imagenes_insertadas_urls = []
-        
         for i, parte in enumerate(partes):
             if i % 2 == 0:
-                # Es texto normal
                 respuesta_final += limpiar_texto(parte) + "\n"
             else:
-                # Es una etiqueta [IMG: ...] que la IA colocó
                 palabras_clave = parte.strip()
-                # Buscamos hasta 5 imágenes para saltar los libros
+                # Buscamos hasta 5 opciones para saltarnos los libros
                 imagenes = buscar_imagen_wikimedia(palabras_clave, limite=5)
                 
-                for img in imagenes:
-                    if img["url"] not in imagenes_insertadas_urls:
-                        tarjeta = f'''
-                        <div class="tarjeta-imagen">
-                            <div class="titulo-imagen">📷 {img["nombre"]}</div>
-                            <img src="{img["url"]}" alt="{palabras_clave}">
-                            <div class="atribucion">Fuente: Wikimedia Commons | Autor: {img["autor"]} | Licencia: {img["licencia"]}</div>
-                        </div>
-                        '''
-                        respuesta_final += tarjeta + "\n"
-                        imagenes_insertadas_urls.append(img["url"])
-                        break # Ponemos la primera imagen bonita que encontremos
-                        
-        # Si la IA olvidó poner imágenes en una investigación, forzamos 1 al final
-        if len(imagenes_insertadas_urls) == 0 and ("investiga" in texto_lower or "resumen" in texto_lower) and query:
-            img_rescate = buscar_imagen_wikimedia(f"{query} portrait", limite=5)
-            if img_rescate:
-                img = img_rescate[0]
-                tarjeta = f'''
-                <div class="tarjeta-imagen">
-                    <div class="titulo-imagen">📷 {img["nombre"]}</div>
-                    <img src="{img["url"]}" alt="{query}">
-                    <div class="atribucion">Fuente: Wikimedia Commons | Autor: {img["autor"]} | Licencia: {img["licencia"]}</div>
-                </div>
-                '''
-                respuesta_final += tarjeta + "\n"
-
+                if imagenes:
+                    img = imagenes[0] # Tomamos la primera que pasó el filtro anti-basura
+                    tarjeta = f'''
+                    <div class="tarjeta-imagen">
+                        <div class="titulo-imagen">📷 {img["nombre"]}</div>
+                        <img src="{img["url"]}" alt="{palabras_clave}">
+                        <div class="atribucion">Fuente: Wikimedia Commons | Autor: {img["autor"]} | Licencia: {img["licencia"]}</div>
+                    </div>
+                    '''
+                    respuesta_final += tarjeta + "\n"
+        
         historial_chat.append({"role": "assistant", "content": respuesta_final})
         
         return jsonify({"respuesta": respuesta_final})
