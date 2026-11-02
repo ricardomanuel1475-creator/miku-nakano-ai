@@ -87,7 +87,7 @@ def buscar_imagen_wikimedia(palabras_clave, limite=5):
 historiales = {}
 
 # ==========================================
-# LA INTERFAZ WEB (HISTORIAL CON BOTÓN DE BORRAR)
+# LA INTERFAZ WEB (CON FOTO DE MIKU MÁS GRANDE)
 # ==========================================
 HTML = """
 <!DOCTYPE html>
@@ -100,12 +100,19 @@ HTML = """
         body { font-family: 'Segoe UI', Arial, sans-serif; background-color: #f0f7ff; display: flex; height: 100dvh; overflow: hidden; }
         
         /* BARRA LATERAL FUSIONADA */
-        .sidebar { width: 300px; background: linear-gradient(180deg, #dff5ff 0%, #b3e0ff 100%); display: flex; flex-direction: column; padding: 15px; border-right: 2px solid #b3d9ff; flex-shrink: 0; overflow: hidden; }
+        .sidebar { width: 320px; background: linear-gradient(180deg, #dff5ff 0%, #b3e0ff 100%); display: flex; flex-direction: column; padding: 15px; border-right: 2px solid #b3d9ff; flex-shrink: 0; overflow: hidden; }
         
-        /* Foto de Miku (Más grande) */
+        /* Foto de Miku (Más grande ahora) */
         .miku-profile { display: flex; flex-direction: column; align-items: center; padding-bottom: 15px; border-bottom: 1px solid #a0d0ff; margin-bottom: 15px; flex-shrink: 0; }
-        .miku-profile img { width: 160px; height: 160px; object-fit: cover; border-radius: 25px; box-shadow: 0 8px 20px rgba(0,0,0,0.15); border: 4px solid #fff; }
-        .miku-profile h2 { margin-top: 12px; color: #2a6f97; font-size: 1.3rem; text-align: center; }
+        .miku-profile img { 
+            width: 210px;  /* <--- TAMAÑO AUMENTADO */
+            height: 210px; 
+            object-fit: cover; 
+            border-radius: 25px; 
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2); 
+            border: 4px solid #fff; 
+        }
+        .miku-profile h2 { margin-top: 12px; color: #2a6f97; font-size: 1.4rem; text-align: center; }
         
         /* Historial */
         .history-section { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
@@ -113,18 +120,18 @@ HTML = """
         .new-chat-btn { background: #4aa3df; color: white; border: none; padding: 10px 12px; border-radius: 8px; cursor: pointer; font-size: 0.85rem; width: 100%; margin-bottom: 10px; font-weight: bold; transition: 0.3s; }
         .new-chat-btn:hover { background: #2a6f97; }
         
-        /* Lista de chats con scroll y botón de borrar */
+        /* Lista de chats */
         #historyList { overflow-y: auto; flex: 1; padding-right: 5px; }
         .chat-history-item { display: flex; justify-content: space-between; align-items: center; padding: 10px; border-radius: 8px; margin-bottom: 5px; cursor: pointer; font-size: 0.85rem; color: #333; background: #fff; border: 1px solid #dff5ff; transition: 0.2s; }
         .chat-history-item:hover { background: #e0f0ff; color: #2a6f97; border-color: #4aa3df; }
         .chat-history-item span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; }
         
-        /* Botón de eliminar (oculto por defecto, aparece al pasar el ratón) */
+        /* Botón de eliminar */
         .delete-btn { display: none; background: transparent; border: none; color: #ff4d4d; cursor: pointer; font-size: 1rem; padding: 0 5px; transition: 0.2s; }
         .chat-history-item:hover .delete-btn { display: block; }
         .delete-btn:hover { color: #cc0000; transform: scale(1.2); }
         
-        /* Scrollbar personalizado */
+        /* Scrollbar */
         #historyList::-webkit-scrollbar { width: 5px; }
         #historyList::-webkit-scrollbar-thumb { background: #a0d0ff; border-radius: 5px; }
 
@@ -156,15 +163,12 @@ HTML = """
     </style>
 </head>
 <body>
-    <!-- BARRA LATERAL FUSIONADA -->
     <div class="sidebar">
-        <!-- Foto de Miku (Más grande) -->
         <div class="miku-profile">
             <img src="/static/fondo_miku.png.jpg" alt="Miku Nakano">
             <h2>Miku Nakano AI 💙🎧</h2>
         </div>
         
-        <!-- Historial de Chats -->
         <div class="history-section">
             <div class="history-title">Tus Chats</div>
             <button class="new-chat-btn" onclick="nuevoChat()">+ Nuevo Chat</button>
@@ -172,7 +176,6 @@ HTML = """
         </div>
     </div>
 
-    <!-- CHAT PRINCIPAL -->
     <div class="main-chat">
         <div class="chat-header">
             <span>💬 Conversación con Miku</span>
@@ -207,21 +210,19 @@ HTML = """
                     const div = document.createElement('div');
                     div.className = 'chat-history-item';
                     
-                    // Texto del chat
                     const span = document.createElement('span');
                     span.innerText = chat[0].texto;
                     span.onclick = () => cargarChat(id);
                     
-                    // Botón de borrar (🗑️)
                     const btn = document.createElement('button');
                     btn.className = 'delete-btn';
                     btn.innerHTML = '🗑️';
                     btn.onclick = (e) => {
-                        e.stopPropagation(); // Evita que al hacer clic en el tacho, se abra el chat
+                        e.stopPropagation();
                         if(confirm('¿Estás segura de eliminar este chat?')) {
                             delete chats[id];
                             guardarChats();
-                            if (currentChatId === id) nuevoChat(); // Si borras el chat actual, empieza uno nuevo
+                            if (currentChatId === id) nuevoChat();
                         }
                     };
                     
