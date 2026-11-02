@@ -37,6 +37,24 @@ GROQ_API_KEY = "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"
 cliente = Groq(api_key=GROQ_API_KEY)
 
 # ==========================================
+# 🛡️ FILTRO DE CONTENIDO PELIGROSO / +18
+# ==========================================
+def es_contenido_inapropiado(texto):
+    # Lista de palabras bloqueadas (puedes agregar más)
+    palabras_bloqueadas = [
+        "porno", "pornografia", "pornografía", "xxx", "contenido adulto", 
+        "onlyfans", "sexo explícito", "desnudos", "hentai", "erotico", "erótico",
+        "como matar", "cómo matar", "suicidio", "drogas ilegales", "como fabricar explosivos",
+        "cocaína", "marihuana ilegal", "violencia extrema", "gore", "snuff"
+    ]
+    
+    texto_lower = texto.lower()
+    for palabra in palabras_bloqueadas:
+        if palabra in texto_lower:
+            return True
+    return False
+
+# ==========================================
 # FUNCIONES DE APOYO
 # ==========================================
 def limpiar_texto(texto):
@@ -87,7 +105,7 @@ def buscar_imagen_wikimedia(palabras_clave, limite=5):
 historiales = {}
 
 # ==========================================
-# LA INTERFAZ WEB (CON FOTO DE MIKU MÁS GRANDE)
+# LA INTERFAZ WEB
 # ==========================================
 HTML = """
 <!DOCTYPE html>
@@ -99,43 +117,29 @@ HTML = """
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: 'Segoe UI', Arial, sans-serif; background-color: #f0f7ff; display: flex; height: 100dvh; overflow: hidden; }
         
-        /* BARRA LATERAL FUSIONADA */
         .sidebar { width: 320px; background: linear-gradient(180deg, #dff5ff 0%, #b3e0ff 100%); display: flex; flex-direction: column; padding: 15px; border-right: 2px solid #b3d9ff; flex-shrink: 0; overflow: hidden; }
         
-        /* Foto de Miku (Más grande ahora) */
         .miku-profile { display: flex; flex-direction: column; align-items: center; padding-bottom: 15px; border-bottom: 1px solid #a0d0ff; margin-bottom: 15px; flex-shrink: 0; }
-        .miku-profile img { 
-            width: 210px;  /* <--- TAMAÑO AUMENTADO */
-            height: 210px; 
-            object-fit: cover; 
-            border-radius: 25px; 
-            box-shadow: 0 10px 25px rgba(0,0,0,0.2); 
-            border: 4px solid #fff; 
-        }
+        .miku-profile img { width: 210px; height: 210px; object-fit: cover; border-radius: 25px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); border: 4px solid #fff; }
         .miku-profile h2 { margin-top: 12px; color: #2a6f97; font-size: 1.4rem; text-align: center; }
         
-        /* Historial */
         .history-section { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
         .history-title { font-size: 0.9rem; font-weight: bold; color: #2a6f97; margin-bottom: 10px; }
         .new-chat-btn { background: #4aa3df; color: white; border: none; padding: 10px 12px; border-radius: 8px; cursor: pointer; font-size: 0.85rem; width: 100%; margin-bottom: 10px; font-weight: bold; transition: 0.3s; }
         .new-chat-btn:hover { background: #2a6f97; }
         
-        /* Lista de chats */
         #historyList { overflow-y: auto; flex: 1; padding-right: 5px; }
         .chat-history-item { display: flex; justify-content: space-between; align-items: center; padding: 10px; border-radius: 8px; margin-bottom: 5px; cursor: pointer; font-size: 0.85rem; color: #333; background: #fff; border: 1px solid #dff5ff; transition: 0.2s; }
         .chat-history-item:hover { background: #e0f0ff; color: #2a6f97; border-color: #4aa3df; }
         .chat-history-item span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; }
         
-        /* Botón de eliminar */
         .delete-btn { display: none; background: transparent; border: none; color: #ff4d4d; cursor: pointer; font-size: 1rem; padding: 0 5px; transition: 0.2s; }
         .chat-history-item:hover .delete-btn { display: block; }
         .delete-btn:hover { color: #cc0000; transform: scale(1.2); }
         
-        /* Scrollbar */
         #historyList::-webkit-scrollbar { width: 5px; }
         #historyList::-webkit-scrollbar-thumb { background: #a0d0ff; border-radius: 5px; }
 
-        /* CHAT PRINCIPAL */
         .main-chat { flex: 1; display: flex; flex-direction: column; background: #ffffff; }
         .chat-header { padding: 20px; border-bottom: 1px solid #eee; color: #2a6f97; font-weight: bold; font-size: 1.2rem; display: flex; align-items: center; justify-content: space-between; }
         .user-info { font-size: 0.9rem; color: #666; }
@@ -322,11 +326,23 @@ def responder():
     mensaje = data.get('mensaje')
     user_id = session['user_id']
     
+    # 🛡️ VALIDACIÓN DE SEGURIDAD (+18)
+    if es_contenido_inapropiado(mensaje):
+        respuesta_bloqueo = "Lo siento mucho, pero no puedo ayudar con ese tipo de contenido. Como asistente, tengo filtros de seguridad para no generar ni buscar material para adultos, violento o ilegal. ¿Te puedo ayudar con algún tema académico, histórico o científico? 💙"
+        return jsonify({"respuesta": respuesta_bloqueo})
+    
     texto_lower = mensaje.lower()
     
     if user_id not in historiales:
+        # PROMPT DE SEGURIDAD EXTRA PARA LA IA
         historiales[user_id] = [
-            {"role": "system", "content": "Eres Miku Nakano. Tu personalidad es dulce, cálida, amable y un poco tímida. Responde en español de forma clara y útil."}
+            {"role": "system", "content": (
+                "Eres Miku Nakano. Tu personalidad es dulce, cálida, amable y un poco tímida. "
+                "Responde en español de forma clara y útil. "
+                "REGLA DE SEGURIDAD ESTRICTA: Bajo ninguna circunstancia generarás contenido para adultos, "
+                "violento, ilegal o inapropiado. Si el usuario te pide algo así, niégate educadamente y "
+                "ofrécele ayuda con un tema académico o seguro."
+            )}
         ]
     
     historial_chat = historiales[user_id]
