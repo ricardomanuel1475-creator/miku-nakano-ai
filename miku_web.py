@@ -9,7 +9,6 @@ import requests
 import re
 import time
 import json
-import urllib.parse
 
 app = Flask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1, x_prefix=1)
@@ -38,7 +37,7 @@ GROQ_API_KEY = "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"
 cliente = Groq(api_key=GROQ_API_KEY)
 
 # ==========================================
-# FUNCIÓN PARA LIMPIAR EL TEXTO
+# FUNCIONES DE APOYO
 # ==========================================
 def limpiar_texto(texto):
     texto = re.sub(r'[*#|]', '', texto)
@@ -46,40 +45,29 @@ def limpiar_texto(texto):
     texto = re.sub(r' +', ' ', texto)
     return texto.strip()
 
-# ==========================================
-# FUNCIÓN PARA BUSCAR IMÁGENES (INTACTA)
-# ==========================================
-def buscar_imagen_wikimedia(palabras_clave, limite=2):
+def buscar_imagen_wikimedia(palabras_clave, limite=5):
     try:
         url = "https://commons.wikimedia.org/w/api.php"
-        headers = {
-            "User-Agent": "MikuNakanoAI/1.0 (https://miku-nakano-ai.onrender.com; contacto@ejemplo.com)"
-        }
+        headers = {"User-Agent": "MikuNakanoAI/1.0 (https://miku-nakano-ai.onrender.com; contacto@ejemplo.com)"}
         params = {
             "action": "query", "generator": "search", "gsrsearch": palabras_clave,
             "gsrnamespace": "6", "gsrlimit": limite, "prop": "imageinfo",
             "iiprop": "url|extmetadata", "iiurlwidth": "800", "format": "json"
         }
-        
         response = requests.get(url, headers=headers, params=params, timeout=15)
-        
         if response.status_code == 200:
             data = response.json()
             paginas = data.get("query", {}).get("pages", {})
-            
             imagenes_encontradas = []
             for page_id, pagina in paginas.items():
-                titulo_archivo = pagina.get("title", "")
-                nombre_limpio = titulo_archivo.replace("File:", "").rsplit('.', 1)[0].replace('_', ' ')
+                titulo_archivo = pagina.get("title", "").lower()
+                nombre_limpio = titulo_archivo.replace("file:", "").rsplit('.', 1)[0].replace('_', ' ')
                 
-                # FILTRO ANTI-LIBROS (INTACTO)
-                titulo_lower = titulo_archivo.lower()
-                if "book" in titulo_lower or "document" in titulo_lower or "scan" in titulo_lower or "cover" in titulo_lower:
+                if any(p in titulo_archivo for p in ["book", "document", "scan", "text", "cover"]):
                     continue
                 
                 info = pagina.get("imageinfo", [{}])[0]
                 url_imagen = info.get("thumburl") or info.get("url")
-                
                 if url_imagen and not url_imagen.lower().endswith(('.svg', '.tiff')):
                     metadatos = info.get("extmetadata", {})
                     licencia = metadatos.get("LicenseShortName", {}).get("value", "Ver en Commons")
@@ -98,7 +86,9 @@ def buscar_imagen_wikimedia(palabras_clave, limite=2):
 
 historiales = {}
 
-# --- LA INTERFAZ WEB (HTML/CSS) INTACTA ---
+# ==========================================
+# LA INTERFAZ WEB (CON HISTORIAL DEBAJO DE MIKU)
+# ==========================================
 HTML = """
 <!DOCTYPE html>
 <html>
@@ -108,9 +98,31 @@ HTML = """
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: 'Segoe UI', Arial, sans-serif; background-color: #f0f7ff; display: flex; height: 100dvh; overflow: hidden; }
-        .sidebar { width: 300px; background: linear-gradient(180deg, #dff5ff 0%, #b3e0ff 100%); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; border-right: 2px solid #b3d9ff; }
-        .sidebar img { width: 100%; max-width: 250px; border-radius: 20px; box-shadow: 0 10px 20px rgba(0,0,0,0.1); }
-        .sidebar h2 { margin-top: 20px; color: #2a6f97; text-align: center; font-size: 1.5rem; }
+        
+        /* BARRA LATERAL FUSIONADA (MIKU + HISTORIAL) */
+        .sidebar { width: 280px; background: linear-gradient(180deg, #dff5ff 0%, #b3e0ff 100%); display: flex; flex-direction: column; padding: 15px; border-right: 2px solid #b3d9ff; flex-shrink: 0; overflow: hidden; }
+        
+        /* Zona de Miku (arriba) */
+        .miku-profile { display: flex; flex-direction: column; align-items: center; padding-bottom: 15px; border-bottom: 1px solid #a0d0ff; margin-bottom: 15px; flex-shrink: 0; }
+        .miku-profile img { width: 120px; height: 120px; object-fit: cover; border-radius: 20px; box-shadow: 0 8px 15px rgba(0,0,0,0.1); border: 3px solid #fff; }
+        .miku-profile h2 { margin-top: 10px; color: #2a6f97; font-size: 1.1rem; text-align: center; }
+        
+        /* Zona de Historial (abajo) */
+        .history-section { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+        .history-title { font-size: 0.9rem; font-weight: bold; color: #2a6f97; margin-bottom: 10px; }
+        .new-chat-btn { background: #4aa3df; color: white; border: none; padding: 8px 12px; border-radius: 8px; cursor: pointer; font-size: 0.85rem; width: 100%; margin-bottom: 10px; font-weight: bold; transition: 0.3s; }
+        .new-chat-btn:hover { background: #2a6f97; }
+        
+        /* Lista de chats con scroll */
+        #historyList { overflow-y: auto; flex: 1; padding-right: 5px; }
+        .chat-history-item { padding: 8px 10px; border-radius: 8px; margin-bottom: 5px; cursor: pointer; font-size: 0.8rem; color: #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: #fff; border: 1px solid #dff5ff; transition: 0.2s; }
+        .chat-history-item:hover { background: #e0f0ff; color: #2a6f97; border-color: #4aa3df; }
+        
+        /* Scrollbar personalizado */
+        #historyList::-webkit-scrollbar { width: 5px; }
+        #historyList::-webkit-scrollbar-thumb { background: #a0d0ff; border-radius: 5px; }
+
+        /* CHAT PRINCIPAL */
         .main-chat { flex: 1; display: flex; flex-direction: column; background: #ffffff; }
         .chat-header { padding: 20px; border-bottom: 1px solid #eee; color: #2a6f97; font-weight: bold; font-size: 1.2rem; display: flex; align-items: center; justify-content: space-between; }
         .user-info { font-size: 0.9rem; color: #666; }
@@ -119,29 +131,42 @@ HTML = """
         .mensaje-usuario { align-self: flex-end; background: #4aa3df; color: white; border-bottom-right-radius: 2px; }
         .mensaje-miku { align-self: flex-start; background: #f0f7ff; color: #1b3a4b; border-bottom-left-radius: 2px; border: 1px solid #dff5ff; }
         .mensaje-miku b { color: #2a6f97; }
+        
         .tarjeta-imagen { background: #fff; border-radius: 8px; padding: 10px; margin: 15px 0; border: 1px solid #e0e0e0; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
         .titulo-imagen { font-weight: bold; color: #2a6f97; font-size: 0.9rem; margin-bottom: 8px; text-transform: capitalize; }
         .tarjeta-imagen img { display: block; width: 100%; height: auto; max-height: 450px; object-fit: contain; background-color: #f8f9fa; border-radius: 5px; margin: 0 auto; border: 1px solid #eee; }
         .atribucion { font-size: 0.75rem; color: #666; margin-top: 8px; font-style: italic; border-top: 1px solid #eee; padding-top: 5px; }
+        
         .input-area { padding: 15px; padding-bottom: 25px; border-top: 1px solid #eee; display: flex; gap: 10px; background: #fafafa; }
         input { flex: 1; padding: 15px; border-radius: 30px; border: 1px solid #ddd; outline: none; font-size: 1rem; transition: 0.3s; }
         input:focus { border-color: #4aa3df; box-shadow: 0 0 0 3px rgba(74, 163, 223, 0.2); }
-        button { padding: 15px 30px; background: #4aa3df; color: white; border: none; border-radius: 30px; cursor: pointer; font-weight: bold; transition: 0.3s; }
-        button:hover { background: #2a6f97; }
+        button.send-btn { padding: 15px 30px; background: #4aa3df; color: white; border: none; border-radius: 30px; cursor: pointer; font-weight: bold; transition: 0.3s; }
+        button.send-btn:hover { background: #2a6f97; }
+        
         @media (max-width: 768px) {
+            .sidebar { display: none; } /* Ocultar barra lateral en móviles */
             body { flex-direction: column; }
-            .sidebar { width: 100%; height: 180px; flex-direction: row; padding: 10px; }
-            .sidebar img { max-width: 120px; }
-            .sidebar h2 { font-size: 1.2rem; margin-top: 0; margin-left: 15px; }
-            .mensaje { max-width: 95%; }
         }
     </style>
 </head>
 <body>
+    <!-- BARRA LATERAL FUSIONADA -->
     <div class="sidebar">
-        <img src="/static/fondo_miku.png.jpg" alt="Miku Nakano">
-        <h2>Miku Nakano AI 💙🎧</h2>
+        <!-- Foto de Miku (Arriba) -->
+        <div class="miku-profile">
+            <img src="/static/fondo_miku.png.jpg" alt="Miku Nakano">
+            <h2>Miku Nakano AI 💙🎧</h2>
+        </div>
+        
+        <!-- Historial de Chats (Abajo) -->
+        <div class="history-section">
+            <div class="history-title">Tus Chats</div>
+            <button class="new-chat-btn" onclick="nuevoChat()">+ Nuevo Chat</button>
+            <div id="historyList"></div>
+        </div>
     </div>
+
+    <!-- CHAT PRINCIPAL -->
     <div class="main-chat">
         <div class="chat-header">
             <span>💬 Conversación con Miku</span>
@@ -152,24 +177,75 @@ HTML = """
         </div>
         <div class="input-area">
             <input type="text" id="mensaje" placeholder="Escribe algo..." onkeypress="if(event.key === 'Enter') enviar()">
-            <button onclick="enviar()">Enviar</button>
+            <button class="send-btn" onclick="enviar()">Enviar</button>
         </div>
     </div>
 
     <script>
+        let currentChatId = Date.now().toString();
+        let chats = JSON.parse(localStorage.getItem('miku_chats')) || {};
+
+        function guardarChats() {
+            localStorage.setItem('miku_chats', JSON.stringify(chats));
+            renderizarHistorial();
+        }
+
+        function renderizarHistorial() {
+            const list = document.getElementById('historyList');
+            list.innerHTML = '';
+            const chatIds = Object.keys(chats).sort((a, b) => b - a);
+            
+            chatIds.forEach(id => {
+                const chat = chats[id];
+                if(chat && chat.length > 0) {
+                    const div = document.createElement('div');
+                    div.className = 'chat-history-item';
+                    div.innerText = chat[0].texto;
+                    div.onclick = () => cargarChat(id);
+                    list.appendChild(div);
+                }
+            });
+        }
+
+        function nuevoChat() {
+            currentChatId = Date.now().toString();
+            document.getElementById('chat').innerHTML = '<div class="mensaje mensaje-miku"><b>Miku:</b> ¡Hola! 💙 Me alegra mucho verte por aquí. ¿En qué puedo ayudarte hoy?</div>';
+        }
+
+        function cargarChat(id) {
+            currentChatId = id;
+            const chat = chats[id];
+            const chatDiv = document.getElementById('chat');
+            chatDiv.innerHTML = '';
+            
+            chat.forEach(msg => {
+                if (msg.role === 'user') {
+                    chatDiv.innerHTML += `<div class="mensaje mensaje-usuario"><b>Tú:</b> ${msg.texto}</div>`;
+                } else {
+                    chatDiv.innerHTML += `<div class="mensaje mensaje-miku"><b>Miku:</b> ${msg.html}</div>`;
+                }
+            });
+            chatDiv.scrollTop = chatDiv.scrollHeight;
+        }
+
         async function enviar() {
             const input = document.getElementById('mensaje');
-            const chat = document.getElementById('chat');
+            const chatDiv = document.getElementById('chat');
             const mensaje = input.value;
             if (!mensaje) return;
             
-            chat.innerHTML += `<div class="mensaje mensaje-usuario"><b>Tú:</b> ${mensaje}</div>`;
+            if (!chats[currentChatId]) chats[currentChatId] = [];
+            chats[currentChatId].push({ role: 'user', texto: mensaje });
+            
+            chatDiv.innerHTML += `<div class="mensaje mensaje-usuario"><b>Tú:</b> ${mensaje}</div>`;
             input.value = '';
-            chat.scrollTop = chat.scrollHeight;
+            chatDiv.scrollTop = chatDiv.scrollHeight;
 
             const idPensando = 'pensando-' + Date.now();
-            chat.innerHTML += `<div class="mensaje mensaje-miku" id="${idPensando}"><b>Miku:</b> Investigando y buscando imágenes exactas... 🔍</div>`;
-            chat.scrollTop = chat.scrollHeight;
+            chatDiv.innerHTML += `<div class="mensaje mensaje-miku" id="${idPensando}"><b>Miku:</b> Investigando... 🔍</div>`;
+            chatDiv.scrollTop = chatDiv.scrollHeight;
+            
+            guardarChats();
 
             const response = await fetch('/responder', {
                 method: 'POST',
@@ -179,8 +255,13 @@ HTML = """
             const data = await response.json();
             
             document.getElementById(idPensando).innerHTML = `<b>Miku:</b> ${data.respuesta}`;
-            chat.scrollTop = chat.scrollHeight;
+            chatDiv.scrollTop = chatDiv.scrollHeight;
+
+            chats[currentChatId].push({ role: 'miku', html: data.respuesta });
+            guardarChats();
         }
+
+        renderizarHistorial();
     </script>
 </body>
 </html>
@@ -225,43 +306,33 @@ def responder():
     historial_chat = historiales[user_id]
     query = ""
     
-    # ==========================================
-    # NUEVO: SISTEMA DE PROFUNDIDAD DINÁMICO
-    # ==========================================
-    # 1. Analizamos qué tipo de investigación pide el usuario
     modo_pequeno = any(p in texto_lower for p in ["breve", "pequeño", "resumen", "rápido", "que es", "quien es"])
     modo_grande = any(p in texto_lower for p in ["completa", "detallada", "grande", "profunda", "extensa", "ensayo", "trabajo", "investigación completa"])
     
-    # 2. Configuramos los parámetros según el modo
     if modo_grande:
         num_fuentes = 10
         max_tokens_respuesta = 4000
-        instruccion_longitud = "Escribe una investigación PROFUNDA y EXTENSA. Incluye: Introducción, Antecedentes, Desarrollo detallado, Análisis, Conclusiones y Bibliografía. Usa títulos y subtítulos."
+        instruccion_longitud = "Escribe una investigación PROFUNDA y EXTENSA. Incluye: Introducción, Antecedentes, Desarrollo detallado, Análisis, Conclusiones y Bibliografía."
     elif modo_pequeno:
         num_fuentes = 3
         max_tokens_respuesta = 800
         instruccion_longitud = "Escribe una respuesta BREVE y DIRECTA. Ve al grano, usa máximo 2 párrafos."
     else:
-        # Modo mediano por defecto
         num_fuentes = 6
         max_tokens_respuesta = 2000
         instruccion_longitud = "Escribe una investigación MEDIANA. Incluye una introducción, 2 o 3 apartados con datos importantes y una conclusión."
 
-    # 3. Buscamos en internet según la profundidad
     if "busca" in texto_lower or "investiga" in texto_lower or "resumen" in texto_lower or "que es" in texto_lower:
         query = texto_lower.replace("miku", "").replace("busca", "").replace("investiga", "").replace("resumen", "").replace("hazme", "").replace("de", "").replace("sobre", "").replace("la", "").replace("el", "").replace("una", "").replace("un", "").replace("que es", "").replace("quien es", "").strip()
         if query:
             try:
-                # Buscamos la cantidad de fuentes que decidimos arriba
                 resultados = DDGS().text(query, max_results=num_fuentes)
                 info_web = "\n".join([f"- {r['title']}: {r['body']}" for r in resultados])
                 historial_chat.append({"role": "system", "content": f"Información de internet ({num_fuentes} fuentes):\n{info_web}"})
             except: pass
 
-    # 4. Añadimos la instrucción de longitud a la IA
     historial_chat.append({"role": "system", "content": instruccion_longitud})
 
-    # TU PROMPT DE IMÁGENES (INTACTO)
     instruccion_imagenes = (
         "IMPORTANTE: Para hacer tu respuesta más visual, añade etiquetas secretas con imágenes. "
         "El formato exacto es: [IMG: palabras clave en inglés]. "
@@ -279,7 +350,7 @@ def responder():
             model="openai/gpt-oss-120b",
             messages=historial_chat,
             temperature=0.7,
-            max_tokens=max_tokens_respuesta # <--- Límite dinámico
+            max_tokens=max_tokens_respuesta
         )
         respuesta_cruda = completion.choices[0].message.content
         
