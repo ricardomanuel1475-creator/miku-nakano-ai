@@ -9,7 +9,6 @@ import requests
 import re
 import time
 import json
-import urllib.parse
 
 app = Flask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1, x_prefix=1)
@@ -56,15 +55,9 @@ def buscar_imagen_wikimedia(palabras_clave, limite=2):
             "User-Agent": "MikuNakanoAI/1.0 (https://miku-nakano-ai.onrender.com; contacto@ejemplo.com)"
         }
         params = {
-            "action": "query",
-            "generator": "search",
-            "gsrsearch": palabras_clave,
-            "gsrnamespace": "6",
-            "gsrlimit": limite,
-            "prop": "imageinfo",
-            "iiprop": "url|extmetadata",
-            "iiurlwidth": "800",
-            "format": "json"
+            "action": "query", "generator": "search", "gsrsearch": palabras_clave,
+            "gsrnamespace": "6", "gsrlimit": limite, "prop": "imageinfo",
+            "iiprop": "url|extmetadata", "iiurlwidth": "800", "format": "json"
         }
         
         response = requests.get(url, headers=headers, params=params, timeout=15)
@@ -78,10 +71,10 @@ def buscar_imagen_wikimedia(palabras_clave, limite=2):
                 titulo_archivo = pagina.get("title", "")
                 nombre_limpio = titulo_archivo.replace("File:", "").rsplit('.', 1)[0].replace('_', ' ')
                 
-                # EL ÚNICO CAMBIO: Evitar que salgan libros o documentos
+                # Filtro anti-libros
                 titulo_lower = titulo_archivo.lower()
                 if "book" in titulo_lower or "document" in titulo_lower or "scan" in titulo_lower or "cover" in titulo_lower:
-                    continue # Salta esta imagen y busca la siguiente
+                    continue 
                 
                 info = pagina.get("imageinfo", [{}])[0]
                 url_imagen = info.get("thumburl") or info.get("url")
@@ -93,15 +86,13 @@ def buscar_imagen_wikimedia(palabras_clave, limite=2):
                     autor = re.sub(r'<[^>]+>', '', autor)
                     
                     imagenes_encontradas.append({
-                        "url": url_imagen,
-                        "nombre": nombre_limpio,
-                        "autor": autor.strip(),
-                        "licencia": licencia.strip()
+                        "url": url_imagen, "nombre": nombre_limpio,
+                        "autor": autor.strip(), "licencia": licencia.strip()
                     })
             return imagenes_encontradas
         return []
     except Exception as e:
-        print(f"Error buscando imagen en Wikimedia Commons: {e}")
+        print(f"Error buscando imagen: {e}")
         return []
 
 historiales = {}
@@ -127,24 +118,10 @@ HTML = """
         .mensaje-usuario { align-self: flex-end; background: #4aa3df; color: white; border-bottom-right-radius: 2px; }
         .mensaje-miku { align-self: flex-start; background: #f0f7ff; color: #1b3a4b; border-bottom-left-radius: 2px; border: 1px solid #dff5ff; }
         .mensaje-miku b { color: #2a6f97; }
-        
         .tarjeta-imagen { background: #fff; border-radius: 8px; padding: 10px; margin: 15px 0; border: 1px solid #e0e0e0; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
         .titulo-imagen { font-weight: bold; color: #2a6f97; font-size: 0.9rem; margin-bottom: 8px; text-transform: capitalize; }
-        
-        .tarjeta-imagen img { 
-            display: block; 
-            width: 100%; 
-            height: auto; 
-            max-height: 450px; 
-            object-fit: contain; 
-            background-color: #f8f9fa; 
-            border-radius: 5px; 
-            margin: 0 auto; 
-            border: 1px solid #eee;
-        }
-        
+        .tarjeta-imagen img { display: block; width: 100%; height: auto; max-height: 450px; object-fit: contain; background-color: #f8f9fa; border-radius: 5px; margin: 0 auto; border: 1px solid #eee; }
         .atribucion { font-size: 0.75rem; color: #666; margin-top: 8px; font-style: italic; border-top: 1px solid #eee; padding-top: 5px; }
-        
         .input-area { padding: 15px; padding-bottom: 25px; border-top: 1px solid #eee; display: flex; gap: 10px; background: #fafafa; }
         input { flex: 1; padding: 15px; border-radius: 30px; border: 1px solid #ddd; outline: none; font-size: 1rem; transition: 0.3s; }
         input:focus { border-color: #4aa3df; box-shadow: 0 0 0 3px rgba(74, 163, 223, 0.2); }
@@ -190,7 +167,7 @@ HTML = """
             chat.scrollTop = chat.scrollHeight;
 
             const idPensando = 'pensando-' + Date.now();
-            chat.innerHTML += `<div class="mensaje mensaje-miku" id="${idPensando}"><b>Miku:</b> Investigando y buscando imágenes exactas... 🔍</div>`;
+            chat.innerHTML += `<div class="mensaje mensaje-miku" id="${idPensando}"><b>Miku:</b> Investigando profundamente... 🔍</div>`;
             chat.scrollTop = chat.scrollHeight;
 
             const response = await fetch('/responder', {
@@ -240,8 +217,17 @@ def responder():
     texto_lower = mensaje.lower()
     
     if user_id not in historiales:
+        # PROMPT MAESTRO: Personalidad de Miku + Regla de Extensión
         historiales[user_id] = [
-            {"role": "system", "content": "Eres Miku Nakano. Tu personalidad es dulce, cálida, amable y un poco tímida. Responde en español de forma clara y útil. Cuando te pidan una investigación o resumen, sé muy detallada y estructurada. Usa texto plano y viñetas simples."}
+            {"role": "system", "content": (
+                "Eres Miku Nakano. Tu personalidad es dulce, cálida, amable y un poco tímida. "
+                "Responde en español de forma clara y útil. Usa texto plano y viñetas simples.\n"
+                "REGLA DE ORO DE EXTENSIÓN: Si el usuario te pide 'ampliar', 'extender', 'hacer más largo' o 'profundizar' "
+                "sobre un tema que ya discutieron, ESTÁS OBLIGADA a triplicar la longitud de tu respuesta anterior. "
+                "Para lograrlo, debes añadir OBLIGATORIAMENTE nuevas secciones como: 'Antecedentes históricos', "
+                "'Contexto detallado', 'Datos curiosos', 'Impacto a largo plazo' o 'Análisis profundo'. "
+                "NUNCA repitas la misma información; investiga y añade datos nuevos."
+            )}
         ]
     
     historial_chat = historiales[user_id]
@@ -256,14 +242,13 @@ def responder():
                 historial_chat.append({"role": "system", "content": f"Info de internet: {info_web}"})
             except: pass
 
-    # TU PROMPT ORIGINAL (Solo agregué la advertencia de no buscar libros)
+    # Añadimos la instrucción de imágenes (igual que tu código original)
     instruccion_imagenes = (
         "IMPORTANTE: Para hacer tu respuesta más visual, añade etiquetas secretas con imágenes. "
         "El formato exacto es: [IMG: palabras clave en inglés]. "
         "CRÍTICO: Usa palabras clave MUY ESPECÍFICAS y en inglés (mínimo 3 palabras). "
         "No uses palabras genéricas como 'war', 'history' o 'people'. "
         "Ejemplo correcto: [IMG: World War II Normandy landings tanks]. "
-        "Ejemplo incorrecto: [IMG: war]. "
         "NUNCA uses la palabra 'book', 'document' o 'scan' en la búsqueda. "
         "Usa máximo 2 imágenes por respuesta, colocadas justo después del párrafo al que se refieren."
     )
@@ -288,11 +273,10 @@ def responder():
                 respuesta_final += limpiar_texto(parte) + "\n"
             else:
                 palabras_clave = parte.strip()
-                # Pedimos 5 opciones para tener de donde escoger si hay libros
                 imagenes = buscar_imagen_wikimedia(palabras_clave, limite=5)
                 
                 if imagenes:
-                    img = imagenes[0] # Tomamos la primera que no sea libro
+                    img = imagenes[0] 
                     tarjeta = f'''
                     <div class="tarjeta-imagen">
                         <div class="titulo-imagen">📷 {img["nombre"]}</div>
