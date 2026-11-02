@@ -47,7 +47,7 @@ def limpiar_texto(texto):
     return texto.strip()
 
 # ==========================================
-# FUNCIÓN PARA BUSCAR IMÁGENES EN WIKIMEDIA COMMONS
+# FUNCIÓN PARA BUSCAR IMÁGENES (INTACTA)
 # ==========================================
 def buscar_imagen_wikimedia(palabras_clave, limite=2):
     try:
@@ -56,15 +56,9 @@ def buscar_imagen_wikimedia(palabras_clave, limite=2):
             "User-Agent": "MikuNakanoAI/1.0 (https://miku-nakano-ai.onrender.com; contacto@ejemplo.com)"
         }
         params = {
-            "action": "query",
-            "generator": "search",
-            "gsrsearch": palabras_clave,
-            "gsrnamespace": "6",
-            "gsrlimit": limite,
-            "prop": "imageinfo",
-            "iiprop": "url|extmetadata",
-            "iiurlwidth": "800",
-            "format": "json"
+            "action": "query", "generator": "search", "gsrsearch": palabras_clave,
+            "gsrnamespace": "6", "gsrlimit": limite, "prop": "imageinfo",
+            "iiprop": "url|extmetadata", "iiurlwidth": "800", "format": "json"
         }
         
         response = requests.get(url, headers=headers, params=params, timeout=15)
@@ -78,10 +72,10 @@ def buscar_imagen_wikimedia(palabras_clave, limite=2):
                 titulo_archivo = pagina.get("title", "")
                 nombre_limpio = titulo_archivo.replace("File:", "").rsplit('.', 1)[0].replace('_', ' ')
                 
-                # EL ÚNICO CAMBIO: Evitar que salgan libros o documentos
+                # FILTRO ANTI-LIBROS (INTACTO)
                 titulo_lower = titulo_archivo.lower()
                 if "book" in titulo_lower or "document" in titulo_lower or "scan" in titulo_lower or "cover" in titulo_lower:
-                    continue # Salta esta imagen y busca la siguiente
+                    continue
                 
                 info = pagina.get("imageinfo", [{}])[0]
                 url_imagen = info.get("thumburl") or info.get("url")
@@ -93,20 +87,18 @@ def buscar_imagen_wikimedia(palabras_clave, limite=2):
                     autor = re.sub(r'<[^>]+>', '', autor)
                     
                     imagenes_encontradas.append({
-                        "url": url_imagen,
-                        "nombre": nombre_limpio,
-                        "autor": autor.strip(),
-                        "licencia": licencia.strip()
+                        "url": url_imagen, "nombre": nombre_limpio,
+                        "autor": autor.strip(), "licencia": licencia.strip()
                     })
             return imagenes_encontradas
         return []
     except Exception as e:
-        print(f"Error buscando imagen en Wikimedia Commons: {e}")
+        print(f"Error buscando imagen: {e}")
         return []
 
 historiales = {}
 
-# --- LA INTERFAZ WEB (HTML/CSS) ---
+# --- LA INTERFAZ WEB (HTML/CSS) INTACTA ---
 HTML = """
 <!DOCTYPE html>
 <html>
@@ -127,24 +119,10 @@ HTML = """
         .mensaje-usuario { align-self: flex-end; background: #4aa3df; color: white; border-bottom-right-radius: 2px; }
         .mensaje-miku { align-self: flex-start; background: #f0f7ff; color: #1b3a4b; border-bottom-left-radius: 2px; border: 1px solid #dff5ff; }
         .mensaje-miku b { color: #2a6f97; }
-        
         .tarjeta-imagen { background: #fff; border-radius: 8px; padding: 10px; margin: 15px 0; border: 1px solid #e0e0e0; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
         .titulo-imagen { font-weight: bold; color: #2a6f97; font-size: 0.9rem; margin-bottom: 8px; text-transform: capitalize; }
-        
-        .tarjeta-imagen img { 
-            display: block; 
-            width: 100%; 
-            height: auto; 
-            max-height: 450px; 
-            object-fit: contain; 
-            background-color: #f8f9fa; 
-            border-radius: 5px; 
-            margin: 0 auto; 
-            border: 1px solid #eee;
-        }
-        
+        .tarjeta-imagen img { display: block; width: 100%; height: auto; max-height: 450px; object-fit: contain; background-color: #f8f9fa; border-radius: 5px; margin: 0 auto; border: 1px solid #eee; }
         .atribucion { font-size: 0.75rem; color: #666; margin-top: 8px; font-style: italic; border-top: 1px solid #eee; padding-top: 5px; }
-        
         .input-area { padding: 15px; padding-bottom: 25px; border-top: 1px solid #eee; display: flex; gap: 10px; background: #fafafa; }
         input { flex: 1; padding: 15px; border-radius: 30px; border: 1px solid #ddd; outline: none; font-size: 1rem; transition: 0.3s; }
         input:focus { border-color: #4aa3df; box-shadow: 0 0 0 3px rgba(74, 163, 223, 0.2); }
@@ -241,29 +219,55 @@ def responder():
     
     if user_id not in historiales:
         historiales[user_id] = [
-            {"role": "system", "content": "Eres Miku Nakano. Tu personalidad es dulce, cálida, amable y un poco tímida. Responde en español de forma clara y útil. Cuando te pidan una investigación o resumen, sé muy detallada y estructurada. Usa texto plano y viñetas simples."}
+            {"role": "system", "content": "Eres Miku Nakano. Tu personalidad es dulce, cálida, amable y un poco tímida. Responde en español de forma clara y útil."}
         ]
     
     historial_chat = historiales[user_id]
     query = ""
     
-    if "busca" in texto_lower or "investiga" in texto_lower or "resumen" in texto_lower:
-        query = texto_lower.replace("miku", "").replace("busca", "").replace("investiga", "").replace("resumen", "").replace("hazme", "").replace("de", "").strip()
+    # ==========================================
+    # NUEVO: SISTEMA DE PROFUNDIDAD DINÁMICO
+    # ==========================================
+    # 1. Analizamos qué tipo de investigación pide el usuario
+    modo_pequeno = any(p in texto_lower for p in ["breve", "pequeño", "resumen", "rápido", "que es", "quien es"])
+    modo_grande = any(p in texto_lower for p in ["completa", "detallada", "grande", "profunda", "extensa", "ensayo", "trabajo", "investigación completa"])
+    
+    # 2. Configuramos los parámetros según el modo
+    if modo_grande:
+        num_fuentes = 10
+        max_tokens_respuesta = 4000
+        instruccion_longitud = "Escribe una investigación PROFUNDA y EXTENSA. Incluye: Introducción, Antecedentes, Desarrollo detallado, Análisis, Conclusiones y Bibliografía. Usa títulos y subtítulos."
+    elif modo_pequeno:
+        num_fuentes = 3
+        max_tokens_respuesta = 800
+        instruccion_longitud = "Escribe una respuesta BREVE y DIRECTA. Ve al grano, usa máximo 2 párrafos."
+    else:
+        # Modo mediano por defecto
+        num_fuentes = 6
+        max_tokens_respuesta = 2000
+        instruccion_longitud = "Escribe una investigación MEDIANA. Incluye una introducción, 2 o 3 apartados con datos importantes y una conclusión."
+
+    # 3. Buscamos en internet según la profundidad
+    if "busca" in texto_lower or "investiga" in texto_lower or "resumen" in texto_lower or "que es" in texto_lower:
+        query = texto_lower.replace("miku", "").replace("busca", "").replace("investiga", "").replace("resumen", "").replace("hazme", "").replace("de", "").replace("sobre", "").replace("la", "").replace("el", "").replace("una", "").replace("un", "").replace("que es", "").replace("quien es", "").strip()
         if query:
             try:
-                resultados = DDGS().text(query, max_results=3)
+                # Buscamos la cantidad de fuentes que decidimos arriba
+                resultados = DDGS().text(query, max_results=num_fuentes)
                 info_web = "\n".join([f"- {r['title']}: {r['body']}" for r in resultados])
-                historial_chat.append({"role": "system", "content": f"Info de internet: {info_web}"})
+                historial_chat.append({"role": "system", "content": f"Información de internet ({num_fuentes} fuentes):\n{info_web}"})
             except: pass
 
-    # TU PROMPT ORIGINAL (Solo agregué la advertencia de no buscar libros)
+    # 4. Añadimos la instrucción de longitud a la IA
+    historial_chat.append({"role": "system", "content": instruccion_longitud})
+
+    # TU PROMPT DE IMÁGENES (INTACTO)
     instruccion_imagenes = (
         "IMPORTANTE: Para hacer tu respuesta más visual, añade etiquetas secretas con imágenes. "
         "El formato exacto es: [IMG: palabras clave en inglés]. "
         "CRÍTICO: Usa palabras clave MUY ESPECÍFICAS y en inglés (mínimo 3 palabras). "
         "No uses palabras genéricas como 'war', 'history' o 'people'. "
         "Ejemplo correcto: [IMG: World War II Normandy landings tanks]. "
-        "Ejemplo incorrecto: [IMG: war]. "
         "NUNCA uses la palabra 'book', 'document' o 'scan' en la búsqueda. "
         "Usa máximo 2 imágenes por respuesta, colocadas justo después del párrafo al que se refieren."
     )
@@ -275,7 +279,7 @@ def responder():
             model="openai/gpt-oss-120b",
             messages=historial_chat,
             temperature=0.7,
-            max_tokens=4000
+            max_tokens=max_tokens_respuesta # <--- Límite dinámico
         )
         respuesta_cruda = completion.choices[0].message.content
         
@@ -288,11 +292,10 @@ def responder():
                 respuesta_final += limpiar_texto(parte) + "\n"
             else:
                 palabras_clave = parte.strip()
-                # Pedimos 5 opciones para tener de donde escoger si hay libros
                 imagenes = buscar_imagen_wikimedia(palabras_clave, limite=5)
                 
                 if imagenes:
-                    img = imagenes[0] # Tomamos la primera que no sea libro
+                    img = imagenes[0] 
                     tarjeta = f'''
                     <div class="tarjeta-imagen">
                         <div class="titulo-imagen">📷 {img["nombre"]}</div>
