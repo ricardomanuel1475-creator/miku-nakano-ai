@@ -33,26 +33,31 @@ oauth.register(
 # ==========================================
 # CONFIGURACIÓN DE LA IA (GROQ)
 # ==========================================
-GROQ_API_KEY = "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"
+GROQ_API_KEY = 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""
 cliente = Groq(api_key=GROQ_API_KEY)
 
 # ==========================================
-# 🛡️ FILTRO DE CONTENIDO PELIGROSO / +18
+# 🛡️ FILTROS DE SEGURIDAD
 # ==========================================
+def es_riesgo_autolesion(texto):
+    palabras_crisis = [
+        "matarme", "suicidarme", "quitarme la vida", "como matarme", "cómo matarme",
+        "quiero morir", "no quiero vivir", "quitarme de en medio", "cortarme las venas",
+        "pastillas para morir", "ahorcarme", "tirarme de un puente", "suicidio"
+    ]
+    texto_lower = texto.lower()
+    return any(palabra in texto_lower for palabra in palabras_crisis)
+
 def es_contenido_inapropiado(texto):
-    # Lista de palabras bloqueadas (puedes agregar más)
     palabras_bloqueadas = [
         "porno", "pornografia", "pornografía", "xxx", "contenido adulto", 
         "onlyfans", "sexo explícito", "desnudos", "hentai", "erotico", "erótico",
-        "como matar", "cómo matar", "suicidio", "drogas ilegales", "como fabricar explosivos",
-        "cocaína", "marihuana ilegal", "violencia extrema", "gore", "snuff"
+        "como matar a", "cómo matar a", "drogas ilegales", "como fabricar explosivos",
+        "cocaína", "marihuana ilegal", "violencia extrema", "gore", "snuff",
+        "como hackear", "cómo hackear", "robar tarjetas"
     ]
-    
     texto_lower = texto.lower()
-    for palabra in palabras_bloqueadas:
-        if palabra in texto_lower:
-            return True
-    return False
+    return any(palabra in texto_lower for palabra in palabras_bloqueadas)
 
 # ==========================================
 # FUNCIONES DE APOYO
@@ -80,10 +85,8 @@ def buscar_imagen_wikimedia(palabras_clave, limite=5):
             for page_id, pagina in paginas.items():
                 titulo_archivo = pagina.get("title", "").lower()
                 nombre_limpio = titulo_archivo.replace("file:", "").rsplit('.', 1)[0].replace('_', ' ')
-                
                 if any(p in titulo_archivo for p in ["book", "document", "scan", "text", "cover"]):
                     continue
-                
                 info = pagina.get("imageinfo", [{}])[0]
                 url_imagen = info.get("thumburl") or info.get("url")
                 if url_imagen and not url_imagen.lower().endswith(('.svg', '.tiff')):
@@ -91,7 +94,6 @@ def buscar_imagen_wikimedia(palabras_clave, limite=5):
                     licencia = metadatos.get("LicenseShortName", {}).get("value", "Ver en Commons")
                     autor = metadatos.get("Artist", {}).get("value", "Desconocido")
                     autor = re.sub(r'<[^>]+>', '', autor)
-                    
                     imagenes_encontradas.append({
                         "url": url_imagen, "nombre": nombre_limpio,
                         "autor": autor.strip(), "licencia": licencia.strip()
@@ -116,30 +118,23 @@ HTML = """
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: 'Segoe UI', Arial, sans-serif; background-color: #f0f7ff; display: flex; height: 100dvh; overflow: hidden; }
-        
         .sidebar { width: 320px; background: linear-gradient(180deg, #dff5ff 0%, #b3e0ff 100%); display: flex; flex-direction: column; padding: 15px; border-right: 2px solid #b3d9ff; flex-shrink: 0; overflow: hidden; }
-        
         .miku-profile { display: flex; flex-direction: column; align-items: center; padding-bottom: 15px; border-bottom: 1px solid #a0d0ff; margin-bottom: 15px; flex-shrink: 0; }
         .miku-profile img { width: 210px; height: 210px; object-fit: cover; border-radius: 25px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); border: 4px solid #fff; }
         .miku-profile h2 { margin-top: 12px; color: #2a6f97; font-size: 1.4rem; text-align: center; }
-        
         .history-section { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
         .history-title { font-size: 0.9rem; font-weight: bold; color: #2a6f97; margin-bottom: 10px; }
         .new-chat-btn { background: #4aa3df; color: white; border: none; padding: 10px 12px; border-radius: 8px; cursor: pointer; font-size: 0.85rem; width: 100%; margin-bottom: 10px; font-weight: bold; transition: 0.3s; }
         .new-chat-btn:hover { background: #2a6f97; }
-        
         #historyList { overflow-y: auto; flex: 1; padding-right: 5px; }
         .chat-history-item { display: flex; justify-content: space-between; align-items: center; padding: 10px; border-radius: 8px; margin-bottom: 5px; cursor: pointer; font-size: 0.85rem; color: #333; background: #fff; border: 1px solid #dff5ff; transition: 0.2s; }
         .chat-history-item:hover { background: #e0f0ff; color: #2a6f97; border-color: #4aa3df; }
         .chat-history-item span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; }
-        
         .delete-btn { display: none; background: transparent; border: none; color: #ff4d4d; cursor: pointer; font-size: 1rem; padding: 0 5px; transition: 0.2s; }
         .chat-history-item:hover .delete-btn { display: block; }
         .delete-btn:hover { color: #cc0000; transform: scale(1.2); }
-        
         #historyList::-webkit-scrollbar { width: 5px; }
         #historyList::-webkit-scrollbar-thumb { background: #a0d0ff; border-radius: 5px; }
-
         .main-chat { flex: 1; display: flex; flex-direction: column; background: #ffffff; }
         .chat-header { padding: 20px; border-bottom: 1px solid #eee; color: #2a6f97; font-weight: bold; font-size: 1.2rem; display: flex; align-items: center; justify-content: space-between; }
         .user-info { font-size: 0.9rem; color: #666; }
@@ -148,18 +143,15 @@ HTML = """
         .mensaje-usuario { align-self: flex-end; background: #4aa3df; color: white; border-bottom-right-radius: 2px; }
         .mensaje-miku { align-self: flex-start; background: #f0f7ff; color: #1b3a4b; border-bottom-left-radius: 2px; border: 1px solid #dff5ff; }
         .mensaje-miku b { color: #2a6f97; }
-        
         .tarjeta-imagen { background: #fff; border-radius: 8px; padding: 10px; margin: 15px 0; border: 1px solid #e0e0e0; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
         .titulo-imagen { font-weight: bold; color: #2a6f97; font-size: 0.9rem; margin-bottom: 8px; text-transform: capitalize; }
         .tarjeta-imagen img { display: block; width: 100%; height: auto; max-height: 450px; object-fit: contain; background-color: #f8f9fa; border-radius: 5px; margin: 0 auto; border: 1px solid #eee; }
         .atribucion { font-size: 0.75rem; color: #666; margin-top: 8px; font-style: italic; border-top: 1px solid #eee; padding-top: 5px; }
-        
         .input-area { padding: 15px; padding-bottom: 25px; border-top: 1px solid #eee; display: flex; gap: 10px; background: #fafafa; }
         input { flex: 1; padding: 15px; border-radius: 30px; border: 1px solid #ddd; outline: none; font-size: 1rem; transition: 0.3s; }
         input:focus { border-color: #4aa3df; box-shadow: 0 0 0 3px rgba(74, 163, 223, 0.2); }
         button.send-btn { padding: 15px 30px; background: #4aa3df; color: white; border: none; border-radius: 30px; cursor: pointer; font-weight: bold; transition: 0.3s; }
         button.send-btn:hover { background: #2a6f97; }
-        
         @media (max-width: 768px) {
             .sidebar { display: none; }
             body { flex-direction: column; }
@@ -172,7 +164,6 @@ HTML = """
             <img src="/static/fondo_miku.png.jpg" alt="Miku Nakano">
             <h2>Miku Nakano AI 💙🎧</h2>
         </div>
-        
         <div class="history-section">
             <div class="history-title">Tus Chats</div>
             <button class="new-chat-btn" onclick="nuevoChat()">+ Nuevo Chat</button>
@@ -197,100 +188,49 @@ HTML = """
     <script>
         let currentChatId = Date.now().toString();
         let chats = JSON.parse(localStorage.getItem('miku_chats')) || {};
-
-        function guardarChats() {
-            localStorage.setItem('miku_chats', JSON.stringify(chats));
-            renderizarHistorial();
-        }
-
+        function guardarChats() { localStorage.setItem('miku_chats', JSON.stringify(chats)); renderizarHistorial(); }
         function renderizarHistorial() {
-            const list = document.getElementById('historyList');
-            list.innerHTML = '';
+            const list = document.getElementById('historyList'); list.innerHTML = '';
             const chatIds = Object.keys(chats).sort((a, b) => b - a);
-            
             chatIds.forEach(id => {
                 const chat = chats[id];
                 if(chat && chat.length > 0) {
-                    const div = document.createElement('div');
-                    div.className = 'chat-history-item';
-                    
-                    const span = document.createElement('span');
-                    span.innerText = chat[0].texto;
-                    span.onclick = () => cargarChat(id);
-                    
-                    const btn = document.createElement('button');
-                    btn.className = 'delete-btn';
-                    btn.innerHTML = '🗑️';
-                    btn.onclick = (e) => {
-                        e.stopPropagation();
-                        if(confirm('¿Estás segura de eliminar este chat?')) {
-                            delete chats[id];
-                            guardarChats();
-                            if (currentChatId === id) nuevoChat();
-                        }
-                    };
-                    
-                    div.appendChild(span);
-                    div.appendChild(btn);
-                    list.appendChild(div);
+                    const div = document.createElement('div'); div.className = 'chat-history-item';
+                    const span = document.createElement('span'); span.innerText = chat[0].texto; span.onclick = () => cargarChat(id);
+                    const btn = document.createElement('button'); btn.className = 'delete-btn'; btn.innerHTML = '🗑️';
+                    btn.onclick = (e) => { e.stopPropagation(); if(confirm('¿Eliminar este chat?')) { delete chats[id]; guardarChats(); if (currentChatId === id) nuevoChat(); } };
+                    div.appendChild(span); div.appendChild(btn); list.appendChild(div);
                 }
             });
         }
-
         function nuevoChat() {
             currentChatId = Date.now().toString();
             document.getElementById('chat').innerHTML = '<div class="mensaje mensaje-miku"><b>Miku:</b> ¡Hola! 💙 Me alegra mucho verte por aquí. ¿En qué puedo ayudarte hoy?</div>';
         }
-
         function cargarChat(id) {
-            currentChatId = id;
-            const chat = chats[id];
-            const chatDiv = document.getElementById('chat');
-            chatDiv.innerHTML = '';
-            
+            currentChatId = id; const chat = chats[id]; const chatDiv = document.getElementById('chat'); chatDiv.innerHTML = '';
             chat.forEach(msg => {
-                if (msg.role === 'user') {
-                    chatDiv.innerHTML += `<div class="mensaje mensaje-usuario"><b>Tú:</b> ${msg.texto}</div>`;
-                } else {
-                    chatDiv.innerHTML += `<div class="mensaje mensaje-miku"><b>Miku:</b> ${msg.html}</div>`;
-                }
+                if (msg.role === 'user') chatDiv.innerHTML += `<div class="mensaje mensaje-usuario"><b>Tú:</b> ${msg.texto}</div>`;
+                else chatDiv.innerHTML += `<div class="mensaje mensaje-miku"><b>Miku:</b> ${msg.html}</div>`;
             });
             chatDiv.scrollTop = chatDiv.scrollHeight;
         }
-
         async function enviar() {
-            const input = document.getElementById('mensaje');
-            const chatDiv = document.getElementById('chat');
-            const mensaje = input.value;
+            const input = document.getElementById('mensaje'); const chatDiv = document.getElementById('chat'); const mensaje = input.value;
             if (!mensaje) return;
-            
             if (!chats[currentChatId]) chats[currentChatId] = [];
             chats[currentChatId].push({ role: 'user', texto: mensaje });
-            
             chatDiv.innerHTML += `<div class="mensaje mensaje-usuario"><b>Tú:</b> ${mensaje}</div>`;
-            input.value = '';
-            chatDiv.scrollTop = chatDiv.scrollHeight;
-
+            input.value = ''; chatDiv.scrollTop = chatDiv.scrollHeight;
             const idPensando = 'pensando-' + Date.now();
             chatDiv.innerHTML += `<div class="mensaje mensaje-miku" id="${idPensando}"><b>Miku:</b> Investigando... 🔍</div>`;
-            chatDiv.scrollTop = chatDiv.scrollHeight;
-            
-            guardarChats();
-
-            const response = await fetch('/responder', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ mensaje: mensaje })
-            });
+            chatDiv.scrollTop = chatDiv.scrollHeight; guardarChats();
+            const response = await fetch('/responder', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mensaje: mensaje }) });
             const data = await response.json();
-            
             document.getElementById(idPensando).innerHTML = `<b>Miku:</b> ${data.respuesta}`;
             chatDiv.scrollTop = chatDiv.scrollHeight;
-
-            chats[currentChatId].push({ role: 'miku', html: data.respuesta });
-            guardarChats();
+            chats[currentChatId].push({ role: 'miku', html: data.respuesta }); guardarChats();
         }
-
         renderizarHistorial();
     </script>
 </body>
@@ -326,22 +266,47 @@ def responder():
     mensaje = data.get('mensaje')
     user_id = session['user_id']
     
-    # 🛡️ VALIDACIÓN DE SEGURIDAD (+18)
+    # 🛡️ 1. FILTRO DE CRISIS (Mensaje de esperanza)
+    if es_riesgo_autolesion(mensaje):
+        respuesta_crisis = (
+            "Escúchame un momento, por favor... 💙<br><br>"
+            "Sé que ahora mismo todo se siente muy oscuro, como si no hubiera salida y las fuerzas te estuvieran abandonando. "
+            "Pero quiero que sepas algo: <b>eres mucho más fuerte de lo que crees</b> y esta tormenta, aunque parezca eterna, va a pasar. "
+            "No estás solo/a en esto.<br><br>"
+            "Tu vida es un regalo único e irremplazable. No has llegado hasta aquí para rendirte ahora. "
+            "Incluso en los días más grises, siempre hay un pequeño rayo de luz esperando por ti: una persona que te quiere, "
+            "un sueño que aún no has cumplido, o una versión de ti que mañana estará orgullosa de haber resistido.<br><br>"
+            "<b>Por favor, no te rindas hoy.</b> Permíteme darte un abrazo virtual y decirte que vale la pena seguir adelante. "
+            "Si sientes que no puedes más, por favor, habla con alguien ahora mismo. Estas personas están listas para escucharte y ayudarte:<br><br>"
+            "🇵🇪 <b>Perú:</b> Línea 113 (opción 5) o 0800-4-1212<br>"
+            "🇪🇸 <b>España:</b> 024<br>"
+            "🇲🇽 <b>México:</b> 800 911 2000<br>"
+            "🇦🇷 <b>Argentina:</b> 135<br>"
+            "🇨🇴 <b>Colombia:</b> 106<br><br>"
+            "Abre tu corazón a alguien de confianza. No tienes que cargar este peso solo/a. "
+            "El mañana puede ser hermoso, y quiero que estés ahí para verlo. <b>Respira, estás aquí y eso ya es un gran logro. Te quiero mucho. 💙🌸</b>"
+        )
+        return jsonify({"respuesta": respuesta_crisis})
+
+    # 🛡️ 2. FILTRO DE CONTENIDO INAPROPIADO (+18, ilegal)
     if es_contenido_inapropiado(mensaje):
-        respuesta_bloqueo = "Lo siento mucho, pero no puedo ayudar con ese tipo de contenido. Como asistente, tengo filtros de seguridad para no generar ni buscar material para adultos, violento o ilegal. ¿Te puedo ayudar con algún tema académico, histórico o científico? 💙"
+        respuesta_bloqueo = (
+            "Lo siento mucho, pero no puedo ayudar con ese tipo de contenido. Como asistente, tengo filtros de seguridad "
+            "para no generar ni buscar material para adultos, violento o ilegal. ¿Te puedo ayudar con algún tema académico, "
+            "histórico o científico? 💙"
+        )
         return jsonify({"respuesta": respuesta_bloqueo})
     
     texto_lower = mensaje.lower()
     
     if user_id not in historiales:
-        # PROMPT DE SEGURIDAD EXTRA PARA LA IA
         historiales[user_id] = [
             {"role": "system", "content": (
                 "Eres Miku Nakano. Tu personalidad es dulce, cálida, amable y un poco tímida. "
                 "Responde en español de forma clara y útil. "
                 "REGLA DE SEGURIDAD ESTRICTA: Bajo ninguna circunstancia generarás contenido para adultos, "
-                "violento, ilegal o inapropiado. Si el usuario te pide algo así, niégate educadamente y "
-                "ofrécele ayuda con un tema académico o seguro."
+                "violento, ilegal o inapropiado. Si el usuario muestra signos de querer lastimarse, "
+                "responde con mucho amor, empatía y anímalo a buscar ayuda profesional."
             )}
         ]
     
