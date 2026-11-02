@@ -9,6 +9,7 @@ import requests
 import re
 import time
 import json
+import urllib.parse
 
 app = Flask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1, x_prefix=1)
@@ -46,23 +47,24 @@ def limpiar_texto(texto):
     return texto.strip()
 
 # ==========================================
-# FUNCIÓN PARA BUSCAR IMÁGENES
+# FUNCIÓN PARA BUSCAR IMÁGENES EN WIKIMEDIA COMMONS
 # ==========================================
-def buscar_imagen_wikimedia(palabras_clave, limite=10, buscar_mapa=False):
+def buscar_imagen_wikimedia(palabras_clave, limite=2):
     try:
-        palabras_clave = re.sub(r'[^\w\s]', '', palabras_clave).strip()
-        if not palabras_clave: return []
-
         url = "https://commons.wikimedia.org/w/api.php"
-        headers = {"User-Agent": "MikuNakanoAI/1.0 (contacto@ejemplo.com)"}
-        
-        if buscar_mapa and "map" not in palabras_clave.lower():
-            palabras_clave += " map"
-
+        headers = {
+            "User-Agent": "MikuNakanoAI/1.0 (https://miku-nakano-ai.onrender.com; contacto@ejemplo.com)"
+        }
         params = {
-            "action": "query", "generator": "search", "gsrsearch": palabras_clave,
-            "gsrnamespace": "6", "gsrlimit": limite, "prop": "imageinfo",
-            "iiprop": "url|size|extmetadata", "iiurlwidth": "800", "format": "json"
+            "action": "query",
+            "generator": "search",
+            "gsrsearch": palabras_clave,
+            "gsrnamespace": "6",
+            "gsrlimit": limite,
+            "prop": "imageinfo",
+            "iiprop": "url|extmetadata",
+            "iiurlwidth": "800",
+            "format": "json"
         }
         
         response = requests.get(url, headers=headers, params=params, timeout=15)
@@ -70,35 +72,36 @@ def buscar_imagen_wikimedia(palabras_clave, limite=10, buscar_mapa=False):
         if response.status_code == 200:
             data = response.json()
             paginas = data.get("query", {}).get("pages", {})
-            imagenes_validas = []
+            
+            imagenes_encontradas = []
             for page_id, pagina in paginas.items():
-                titulo_archivo = pagina.get("title", "").lower()
-                nombre_limpio = titulo_archivo.replace("file:", "").rsplit('.', 1)[0].replace('_', ' ')
+                titulo_archivo = pagina.get("title", "")
+                nombre_limpio = titulo_archivo.replace("File:", "").rsplit('.', 1)[0].replace('_', ' ')
+                
                 info = pagina.get("imageinfo", [{}])[0]
                 url_imagen = info.get("thumburl") or info.get("url")
-                ancho_original = info.get("width", 0)
                 
-                if not url_imagen: continue
-                es_formato_valido = url_imagen.lower().endswith(('.jpg', '.jpeg', '.png'))
-                es_alta_resolucion = ancho_original >= 500 
-                palabras_basura = ["book", "document", "scan", "text", "cover", "signature", "graph", "chart"]
-                es_basura = any(palabra in titulo_archivo for palabra in palabras_basura)
-
-                if es_formato_valido and es_alta_resolucion and not es_basura:
+                if url_imagen and not url_imagen.lower().endswith(('.svg', '.tiff')):
                     metadatos = info.get("extmetadata", {})
                     licencia = metadatos.get("LicenseShortName", {}).get("value", "Ver en Commons")
                     autor = metadatos.get("Artist", {}).get("value", "Desconocido")
                     autor = re.sub(r'<[^>]+>', '', autor)
-                    imagenes_validas.append({"url": url_imagen, "nombre": nombre_limpio, "autor": autor.strip(), "licencia": licencia.strip()})
-            return imagenes_validas
+                    
+                    imagenes_encontradas.append({
+                        "url": url_imagen,
+                        "nombre": nombre_limpio,
+                        "autor": autor.strip(),
+                        "licencia": licencia.strip()
+                    })
+            return imagenes_encontradas
         return []
     except Exception as e:
-        print(f"Error buscando imagen: {e}")
+        print(f"Error buscando imagen en Wikimedia Commons: {e}")
         return []
 
 historiales = {}
 
-# --- HTML ---
+# --- LA INTERFAZ WEB (HTML/CSS) ---
 HTML = """
 <!DOCTYPE html>
 <html>
@@ -117,12 +120,27 @@ HTML = """
         #chat { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 15px; }
         .mensaje { max-width: 85%; padding: 12px 16px; border-radius: 15px; line-height: 1.5; font-size: 0.95rem; white-space: pre-wrap; }
         .mensaje-usuario { align-self: flex-end; background: #4aa3df; color: white; border-bottom-right-radius: 2px; }
-        .mensaje-miku { align-self: flex-start; background: #f0f7ff; color: #1b3a4b; border-bottom-left-radius: 2px; border: 1px solid #dff5ff; width: auto; max-width: 90%; min-width: 250px; }
+        .mensaje-miku { align-self: flex-start; background: #f0f7ff; color: #1b3a4b; border-bottom-left-radius: 2px; border: 1px solid #dff5ff; }
         .mensaje-miku b { color: #2a6f97; }
-        .tarjeta-imagen { background: #fff; border-radius: 8px; padding: 10px; margin: 15px 0; border: 1px solid #e0e0e0; box-shadow: 0 2px 5px rgba(0,0,0,0.05); width: 100%; display: block; }
+        
+        /* CSS ACTUALIZADO PARA QUE LAS IMÁGENES NO SE RECORTEN */
+        .tarjeta-imagen { background: #fff; border-radius: 8px; padding: 10px; margin: 15px 0; border: 1px solid #e0e0e0; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
         .titulo-imagen { font-weight: bold; color: #2a6f97; font-size: 0.9rem; margin-bottom: 8px; text-transform: capitalize; }
-        .tarjeta-imagen img { display: block; width: 100%; height: auto; max-height: 600px; object-fit: contain; background-color: #f8f9fa; border-radius: 5px; margin: 0 auto; border: 1px solid #eee; }
+        
+        .tarjeta-imagen img { 
+            display: block; 
+            width: 100%; 
+            height: auto; 
+            max-height: 450px; /* Límite máximo para que no se haga gigante */
+            object-fit: contain; /* ESTO HACE QUE SE VEA COMPLETA SIN RECORTAR */
+            background-color: #f8f9fa; /* Fondo gris claro por si la foto es vertical */
+            border-radius: 5px; 
+            margin: 0 auto; 
+            border: 1px solid #eee;
+        }
+        
         .atribucion { font-size: 0.75rem; color: #666; margin-top: 8px; font-style: italic; border-top: 1px solid #eee; padding-top: 5px; }
+        
         .input-area { padding: 15px; padding-bottom: 25px; border-top: 1px solid #eee; display: flex; gap: 10px; background: #fafafa; }
         input { flex: 1; padding: 15px; border-radius: 30px; border: 1px solid #ddd; outline: none; font-size: 1rem; transition: 0.3s; }
         input:focus { border-color: #4aa3df; box-shadow: 0 0 0 3px rgba(74, 163, 223, 0.2); }
@@ -134,7 +152,6 @@ HTML = """
             .sidebar img { max-width: 120px; }
             .sidebar h2 { font-size: 1.2rem; margin-top: 0; margin-left: 15px; }
             .mensaje { max-width: 95%; }
-            .mensaje-miku { max-width: 100%; }
         }
     </style>
 </head>
@@ -156,6 +173,7 @@ HTML = """
             <button onclick="enviar()">Enviar</button>
         </div>
     </div>
+
     <script>
         async function enviar() {
             const input = document.getElementById('mensaje');
@@ -168,7 +186,7 @@ HTML = """
             chat.scrollTop = chat.scrollHeight;
 
             const idPensando = 'pensando-' + Date.now();
-            chat.innerHTML += `<div class="mensaje mensaje-miku" id="${idPensando}"><b>Miku:</b> Investigando y preparando 3 imágenes HD... 🔍</div>`;
+            chat.innerHTML += `<div class="mensaje mensaje-miku" id="${idPensando}"><b>Miku:</b> Investigando y buscando imágenes exactas... 🔍</div>`;
             chat.scrollTop = chat.scrollHeight;
 
             const response = await fetch('/responder', {
@@ -224,12 +242,9 @@ def responder():
     
     historial_chat = historiales[user_id]
     query = ""
-    es_investigacion = False
     
-    if "busca" in texto_lower or "investiga" in texto_lower or "resumen" in texto_lower or "quien" in texto_lower or "qué" in texto_lower or "historia" in texto_lower:
-        es_investigacion = True
-        query = texto_lower.replace("miku", "").replace("busca", "").replace("investiga", "").replace("resumen", "").replace("hazme", "").replace("de", "").replace("sobre", "").replace("la", "").replace("el", "").replace("quien", "").replace("era", "").replace("qué", "").replace("es", "").strip()
-        
+    if "busca" in texto_lower or "investiga" in texto_lower or "resumen" in texto_lower:
+        query = texto_lower.replace("miku", "").replace("busca", "").replace("investiga", "").replace("resumen", "").replace("hazme", "").replace("de", "").strip()
         if query:
             try:
                 resultados = DDGS().text(query, max_results=3)
@@ -238,12 +253,13 @@ def responder():
             except: pass
 
     instruccion_imagenes = (
-        "IMPORTANTE: Al final de tu respuesta, escribe EXACTAMENTE 3 etiquetas secretas para imágenes en inglés. "
-        "Formato: [IMG: palabra clave]. "
-        "1. Personaje/Tema principal: [IMG: nombre del tema portrait] "
-        "2. Mapa: [IMG: nombre del tema map] "
-        "3. Contexto/Lugar: [IMG: nombre del tema landscape] "
-        "No escribas nada más después de estas 3 etiquetas."
+        "IMPORTANTE: Para hacer tu respuesta más visual, añade etiquetas secretas con imágenes. "
+        "El formato exacto es: [IMG: palabras clave en inglés]. "
+        "CRÍTICO: Usa palabras clave MUY ESPECÍFICAS y en inglés (mínimo 3 palabras). "
+        "No uses palabras genéricas como 'war', 'history' o 'people'. "
+        "Ejemplo correcto: [IMG: World War II Normandy landings tanks]. "
+        "Ejemplo incorrecto: [IMG: war]. "
+        "Usa máximo 2 imágenes por respuesta, colocadas justo después del párrafo al que se refieren."
     )
     historial_chat.append({"role": "system", "content": instruccion_imagenes})
     historial_chat.append({"role": "user", "content": mensaje})
@@ -257,53 +273,28 @@ def responder():
         )
         respuesta_cruda = completion.choices[0].message.content
         
-        # Extraemos etiquetas y limpiamos el texto
-        etiquetas_ia = re.findall(r'\[IMG:\s*(.*?)\]', respuesta_cruda)
-        texto_limpio = re.sub(r'\[IMG:\s*(.*?)\]', '', respuesta_cruda)
-        texto_limpio = limpiar_texto(texto_limpio)
+        patron = r'\[IMG:\s*(.*?)\]'
+        partes = re.split(patron, respuesta_cruda)
         
-        # Buscamos las imágenes
-        imagenes_a_insertar = []
+        respuesta_final = ""
+        for i, parte in enumerate(partes):
+            if i % 2 == 0:
+                respuesta_final += limpiar_texto(parte) + "\n"
+            else:
+                palabras_clave = parte.strip()
+                imagenes = buscar_imagen_wikimedia(palabras_clave, limite=1)
+                
+                if imagenes:
+                    img = imagenes[0]
+                    tarjeta = f'''
+                    <div class="tarjeta-imagen">
+                        <div class="titulo-imagen">📷 {img["nombre"]}</div>
+                        <img src="{img["url"]}" alt="{palabras_clave}">
+                        <div class="atribucion">Fuente: Wikimedia Commons | Autor: {img["autor"]} | Licencia: {img["licencia"]}</div>
+                    </div>
+                    '''
+                    respuesta_final += tarjeta + "\n"
         
-        # Usamos las etiquetas de la IA si existen
-        if etiquetas_ia:
-            for etiqueta in etiquetas_ia:
-                if len(imagenes_a_insertar) >= 3: break
-                img = buscar_imagen_wikimedia(etiqueta.strip(), limite=5)
-                if img:
-                    for i in img:
-                        if not any(e['url'] == i['url'] for e in imagenes_a_insertar):
-                            imagenes_a_insertar.append(i)
-                            break
-
-        # Plan B: Si faltan imágenes, buscamos forzadamente con la query
-        if len(imagenes_a_insertar) < 3 and query:
-            if len(imagenes_a_insertar) < 3:
-                img1 = buscar_imagen_wikimedia(f"{query} portrait", limite=5)
-                if img1: imagenes_a_insertar.append(img1[0])
-            if len(imagenes_a_insertar) < 3:
-                img2 = buscar_imagen_wikimedia(f"{query}", limite=5, buscar_mapa=True)
-                if img2: imagenes_a_insertar.append(img2[0])
-            if len(imagenes_a_insertar) < 3:
-                img3 = buscar_imagen_wikimedia(f"{query} photography", limite=5)
-                if img3: imagenes_a_insertar.append(img3[0])
-
-        # CONSTRUIR RESPUESTA FINAL: Inyectamos las imágenes al final para asegurar que se vean
-        respuesta_final = texto_limpio + "\n\n"
-        
-        if imagenes_a_insertar:
-            respuesta_final += "<h3>📸 Imágenes de la investigación:</h3>"
-            for img in imagenes_a_insertar:
-                respuesta_final += f'''
-                <div class="tarjeta-imagen">
-                    <div class="titulo-imagen">📷 {img["nombre"]}</div>
-                    <img src="{img["url"]}" alt="Imagen de investigación">
-                    <div class="atribucion">Fuente: Wikimedia Commons | Autor: {img["autor"]} | Licencia: {img["licencia"]}</div>
-                </div>
-                '''
-        else:
-            respuesta_final += "<p><i>(No se encontraron imágenes de alta calidad para esta búsqueda)</i></p>"
-
         historial_chat.append({"role": "assistant", "content": respuesta_final})
         
         return jsonify({"respuesta": respuesta_final})
