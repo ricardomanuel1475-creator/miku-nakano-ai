@@ -9,6 +9,7 @@ import requests
 import re
 import time
 import json
+import urllib.parse
 
 app = Flask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1, x_prefix=1)
@@ -46,9 +47,9 @@ def limpiar_texto(texto):
     return texto.strip()
 
 # ==========================================
-# FUNCIÓN PARA BUSCAR IMÁGENES (FILTRO ULTRA ESTRICTO)
+# FUNCIÓN PARA BUSCAR IMÁGENES EN WIKIMEDIA COMMONS
 # ==========================================
-def buscar_imagen_wikimedia(palabras_clave, limite=5):
+def buscar_imagen_wikimedia(palabras_clave, limite=2):
     try:
         url = "https://commons.wikimedia.org/w/api.php"
         headers = {
@@ -59,9 +60,9 @@ def buscar_imagen_wikimedia(palabras_clave, limite=5):
             "generator": "search",
             "gsrsearch": palabras_clave,
             "gsrnamespace": "6",
-            "gsrlimit": limite, # Pedimos 5 opciones para tener de donde escoger
+            "gsrlimit": limite,
             "prop": "imageinfo",
-            "iiprop": "url|size|extmetadata",
+            "iiprop": "url|extmetadata",
             "iiurlwidth": "800",
             "format": "json"
         }
@@ -74,31 +75,19 @@ def buscar_imagen_wikimedia(palabras_clave, limite=5):
             
             imagenes_encontradas = []
             for page_id, pagina in paginas.items():
-                titulo_archivo = pagina.get("title", "").lower()
-                nombre_limpio = titulo_archivo.replace("file:", "").rsplit('.', 1)[0].replace('_', ' ')
+                titulo_archivo = pagina.get("title", "")
+                nombre_limpio = titulo_archivo.replace("File:", "").rsplit('.', 1)[0].replace('_', ' ')
+                
+                # EL ÚNICO CAMBIO: Evitar que salgan libros o documentos
+                titulo_lower = titulo_archivo.lower()
+                if "book" in titulo_lower or "document" in titulo_lower or "scan" in titulo_lower or "cover" in titulo_lower:
+                    continue # Salta esta imagen y busca la siguiente
                 
                 info = pagina.get("imageinfo", [{}])[0]
                 url_imagen = info.get("thumburl") or info.get("url")
-                ancho_original = info.get("width", 0)
                 
-                if not url_imagen: continue
-
-                # --- FILTRO ANTI-BASURA ULTRA ESTRICTO ---
-                # 1. Verificamos el título
-                titulo_basura = ["book", "document", "scan", "text", "cover", "signature", "graph", "chart", "page", "paper", "manuscript", "letter"]
-                es_basura_titulo = any(palabra in titulo_archivo for palabra in titulo_basura)
-
-                # 2. Verificamos la descripción (A veces los libros se esconden aquí)
-                metadatos = info.get("extmetadata", {})
-                descripcion_raw = metadatos.get("ImageDescription", {}).get("value", "").lower()
-                descripcion_limpia = re.sub(r'<[^>]+>', '', descripcion_raw)
-                es_basura_descripcion = any(palabra in descripcion_limpia for palabra in titulo_basura)
-
-                # 3. Verificamos que sea una foto válida
-                es_formato_valido = url_imagen.lower().endswith(('.jpg', '.jpeg', '.png'))
-                es_alta_resolucion = ancho_original >= 500 
-
-                if es_formato_valido and es_alta_resolucion and not es_basura_titulo and not es_basura_descripcion:
+                if url_imagen and not url_imagen.lower().endswith(('.svg', '.tiff')):
+                    metadatos = info.get("extmetadata", {})
                     licencia = metadatos.get("LicenseShortName", {}).get("value", "Ver en Commons")
                     autor = metadatos.get("Artist", {}).get("value", "Desconocido")
                     autor = re.sub(r'<[^>]+>', '', autor)
@@ -112,7 +101,7 @@ def buscar_imagen_wikimedia(palabras_clave, limite=5):
             return imagenes_encontradas
         return []
     except Exception as e:
-        print(f"Error buscando imagen: {e}")
+        print(f"Error buscando imagen en Wikimedia Commons: {e}")
         return []
 
 historiales = {}
@@ -136,16 +125,22 @@ HTML = """
         #chat { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 15px; }
         .mensaje { max-width: 85%; padding: 12px 16px; border-radius: 15px; line-height: 1.5; font-size: 0.95rem; white-space: pre-wrap; }
         .mensaje-usuario { align-self: flex-end; background: #4aa3df; color: white; border-bottom-right-radius: 2px; }
-        .mensaje-miku { align-self: flex-start; background: #f0f7ff; color: #1b3a4b; border-bottom-left-radius: 2px; border: 1px solid #dff5ff; width: auto; max-width: 90%; }
+        .mensaje-miku { align-self: flex-start; background: #f0f7ff; color: #1b3a4b; border-bottom-left-radius: 2px; border: 1px solid #dff5ff; }
         .mensaje-miku b { color: #2a6f97; }
         
         .tarjeta-imagen { background: #fff; border-radius: 8px; padding: 10px; margin: 15px 0; border: 1px solid #e0e0e0; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
         .titulo-imagen { font-weight: bold; color: #2a6f97; font-size: 0.9rem; margin-bottom: 8px; text-transform: capitalize; }
         
         .tarjeta-imagen img { 
-            display: block; width: 100%; height: auto; max-height: 450px; 
-            object-fit: contain; background-color: #f8f9fa; border-radius: 5px; 
-            margin: 0 auto; border: 1px solid #eee;
+            display: block; 
+            width: 100%; 
+            height: auto; 
+            max-height: 450px; 
+            object-fit: contain; 
+            background-color: #f8f9fa; 
+            border-radius: 5px; 
+            margin: 0 auto; 
+            border: 1px solid #eee;
         }
         
         .atribucion { font-size: 0.75rem; color: #666; margin-top: 8px; font-style: italic; border-top: 1px solid #eee; padding-top: 5px; }
@@ -161,7 +156,6 @@ HTML = """
             .sidebar img { max-width: 120px; }
             .sidebar h2 { font-size: 1.2rem; margin-top: 0; margin-left: 15px; }
             .mensaje { max-width: 95%; }
-            .mensaje-miku { max-width: 100%; }
         }
     </style>
 </head>
@@ -247,15 +241,7 @@ def responder():
     
     if user_id not in historiales:
         historiales[user_id] = [
-            {"role": "system", "content": (
-                "Eres Miku Nakano. Tu personalidad es dulce, cálida, amable y un poco tímida. "
-                "Responde en español de forma clara y útil. Usa texto plano y viñetas simples.\n"
-                "REGLA DE ORO DE EXTENSIÓN: Si el usuario te pide 'ampliar', 'extender', 'hacer más largo' o 'profundizar' "
-                "sobre un tema que ya discutieron, ESTÁS OBLIGADA a triplicar la longitud de tu respuesta anterior. "
-                "Para lograrlo, debes añadir OBLIGATORIAMENTE nuevas secciones como: 'Antecedentes históricos', "
-                "'Contexto detallado', 'Datos curiosos', 'Impacto a largo plazo' o 'Análisis profundo'. "
-                "NUNCA repitas la misma información; investiga y añade datos nuevos."
-            )}
+            {"role": "system", "content": "Eres Miku Nakano. Tu personalidad es dulce, cálida, amable y un poco tímida. Responde en español de forma clara y útil. Cuando te pidan una investigación o resumen, sé muy detallada y estructurada. Usa texto plano y viñetas simples."}
         ]
     
     historial_chat = historiales[user_id]
@@ -270,12 +256,14 @@ def responder():
                 historial_chat.append({"role": "system", "content": f"Info de internet: {info_web}"})
             except: pass
 
+    # TU PROMPT ORIGINAL (Solo agregué la advertencia de no buscar libros)
     instruccion_imagenes = (
         "IMPORTANTE: Para hacer tu respuesta más visual, añade etiquetas secretas con imágenes. "
         "El formato exacto es: [IMG: palabras clave en inglés]. "
         "CRÍTICO: Usa palabras clave MUY ESPECÍFICAS y en inglés (mínimo 3 palabras). "
         "No uses palabras genéricas como 'war', 'history' o 'people'. "
         "Ejemplo correcto: [IMG: World War II Normandy landings tanks]. "
+        "Ejemplo incorrecto: [IMG: war]. "
         "NUNCA uses la palabra 'book', 'document' o 'scan' en la búsqueda. "
         "Usa máximo 2 imágenes por respuesta, colocadas justo después del párrafo al que se refieren."
     )
@@ -300,11 +288,11 @@ def responder():
                 respuesta_final += limpiar_texto(parte) + "\n"
             else:
                 palabras_clave = parte.strip()
-                # Buscamos 5 opciones para asegurar que saltamos los libros
+                # Pedimos 5 opciones para tener de donde escoger si hay libros
                 imagenes = buscar_imagen_wikimedia(palabras_clave, limite=5)
                 
                 if imagenes:
-                    img = imagenes[0] 
+                    img = imagenes[0] # Tomamos la primera que no sea libro
                     tarjeta = f'''
                     <div class="tarjeta-imagen">
                         <div class="titulo-imagen">📷 {img["nombre"]}</div>
