@@ -1,4 +1,4 @@
-from flask import Flask, render_template_string, request, jsonify, session, redirect, url_for
+from flask import Flask, render_template_string, request, jsonify, session, redirect, url_for, send_from_directory
 from werkzeug.middleware.proxy_fix import ProxyFix
 import os
 from groq import Groq
@@ -21,7 +21,7 @@ app.secret_key = "MikuNakanoEsLaMejorAsistente2026"
 # CONFIGURACIÓN DE GOOGLE (AUTH)
 # ==========================================
 app.config['GOOGLE_CLIENT_ID'] = "183518295635-devpot1v7r6v8902r0d53vdqqatjeu7a.apps.googleusercontent.com"
-app.config['GOOGLE_CLIENT_SECRET'] = "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"
+app.config['GOOGLE_CLIENT_SECRET'] = os.environ.get('GOOGLE_CLIENT_SECRET', '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')
 
 oauth = OAuth(app)
 oauth.register(
@@ -115,6 +115,8 @@ HTML = """
 <head>
     <title>Miku Nakano AI</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#4aa3df">
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: 'Segoe UI', Arial, sans-serif; background-color: #f0f7ff; display: flex; height: 100dvh; overflow: hidden; }
@@ -248,7 +250,10 @@ HTML = """
         function nuevoChat() {
             currentChatId = Date.now().toString();
             document.getElementById('chat').innerHTML = '<div class="mensaje mensaje-miku"><b>Miku:</b> ¡Hola! 💙 Me alegra mucho verte por aquí. ¿En qué puedo ayudarte hoy?</div>';
-            toggleMenu(); // Cierra el menú al crear uno nuevo
+            // Si el menú está abierto en celular, lo cerramos
+            if (document.getElementById('sidebar').classList.contains('active')) {
+                toggleMenu();
+            }
         }
         
         function cargarChat(id) {
@@ -277,6 +282,15 @@ HTML = """
             chats[currentChatId].push({ role: 'miku', html: data.respuesta }); guardarChats();
         }
         renderizarHistorial();
+
+        // Registrar el Service Worker para que PWABuilder lo detecte
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js')
+                    .then(registration => console.log('ServiceWorker registrado con éxito:', registration.scope))
+                    .catch(error => console.log('Fallo al registrar ServiceWorker:', error));
+            });
+        }
     </script>
 </body>
 </html>
@@ -302,6 +316,17 @@ def authorize():
         session['user'] = user_info
         session['user_id'] = user_info.get('email')
     return redirect('/')
+
+# ==========================================
+# RUTAS PARA PWABUILDER (MANIFEST Y SERVICE WORKER)
+# ==========================================
+@app.route('/manifest.json')
+def serve_manifest():
+    return send_from_directory('static', 'manifest.json')
+
+@app.route('/sw.js')
+def serve_sw():
+    return send_from_directory('static', 'sw.js')
 
 @app.route('/responder', methods=['POST'])
 def responder():
