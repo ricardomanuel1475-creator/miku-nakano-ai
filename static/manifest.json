@@ -1,0 +1,21 @@
+{
+  "name": "Miku Nakano AI",
+  "short_name": "Miku AI",
+  "description": "Tu asistente de investigación personal con Miku Nakano.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f0f7ff",
+  "theme_color": "#4aa3df",
+  "icons": [
+    {
+      "src": "/static/fondo_miku.png.jpg",
+      "sizes": "192x192",
+      "type": "image/jpeg"
+    },
+    {
+      "src": "/static/fondo_miku.png.jpg",
+      "sizes": "512x512",
+      "type": "image/jpeg"
+    }
+  ]
+}
