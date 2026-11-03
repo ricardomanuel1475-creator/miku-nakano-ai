@@ -21,7 +21,7 @@ app.secret_key = "MikuNakanoEsLaMejorAsistente2026"
 # CONFIGURACIÓN DE GOOGLE (AUTH)
 # ==========================================
 app.config['GOOGLE_CLIENT_ID'] = "183518295635-devpot1v7r6v8902r0d53vdqqatjeu7a.apps.googleusercontent.com"
-app.config['GOOGLE_CLIENT_SECRET'] = "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"
+app.config['GOOGLE_CLIENT_SECRET'] = "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"
 
 oauth = OAuth(app)
 oauth.register(
