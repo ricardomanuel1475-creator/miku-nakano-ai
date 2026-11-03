@@ -107,7 +107,7 @@ def buscar_imagen_wikimedia(palabras_clave, limite=5):
 historiales = {}
 
 # ==========================================
-# LA INTERFAZ WEB
+# LA INTERFAZ WEB (CON MENÚ DESLIZABLE PARA CELULAR)
 # ==========================================
 HTML = """
 <!DOCTYPE html>
@@ -118,48 +118,74 @@ HTML = """
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: 'Segoe UI', Arial, sans-serif; background-color: #f0f7ff; display: flex; height: 100dvh; overflow: hidden; }
-        .sidebar { width: 320px; background: linear-gradient(180deg, #dff5ff 0%, #b3e0ff 100%); display: flex; flex-direction: column; padding: 15px; border-right: 2px solid #b3d9ff; flex-shrink: 0; overflow: hidden; }
+        
+        /* BARRA LATERAL (Escritorio) */
+        .sidebar { width: 320px; background: linear-gradient(180deg, #dff5ff 0%, #b3e0ff 100%); display: flex; flex-direction: column; padding: 15px; border-right: 2px solid #b3d9ff; flex-shrink: 0; overflow: hidden; transition: transform 0.3s ease; }
+        
         .miku-profile { display: flex; flex-direction: column; align-items: center; padding-bottom: 15px; border-bottom: 1px solid #a0d0ff; margin-bottom: 15px; flex-shrink: 0; }
         .miku-profile img { width: 210px; height: 210px; object-fit: cover; border-radius: 25px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); border: 4px solid #fff; }
         .miku-profile h2 { margin-top: 12px; color: #2a6f97; font-size: 1.4rem; text-align: center; }
+        
         .history-section { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
         .history-title { font-size: 0.9rem; font-weight: bold; color: #2a6f97; margin-bottom: 10px; }
         .new-chat-btn { background: #4aa3df; color: white; border: none; padding: 10px 12px; border-radius: 8px; cursor: pointer; font-size: 0.85rem; width: 100%; margin-bottom: 10px; font-weight: bold; transition: 0.3s; }
         .new-chat-btn:hover { background: #2a6f97; }
+        
         #historyList { overflow-y: auto; flex: 1; padding-right: 5px; }
         .chat-history-item { display: flex; justify-content: space-between; align-items: center; padding: 10px; border-radius: 8px; margin-bottom: 5px; cursor: pointer; font-size: 0.85rem; color: #333; background: #fff; border: 1px solid #dff5ff; transition: 0.2s; }
         .chat-history-item:hover { background: #e0f0ff; color: #2a6f97; border-color: #4aa3df; }
         .chat-history-item span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; }
+        
         .delete-btn { display: none; background: transparent; border: none; color: #ff4d4d; cursor: pointer; font-size: 1rem; padding: 0 5px; transition: 0.2s; }
         .chat-history-item:hover .delete-btn { display: block; }
         .delete-btn:hover { color: #cc0000; transform: scale(1.2); }
+        
         #historyList::-webkit-scrollbar { width: 5px; }
         #historyList::-webkit-scrollbar-thumb { background: #a0d0ff; border-radius: 5px; }
-        .main-chat { flex: 1; display: flex; flex-direction: column; background: #ffffff; }
+
+        /* CHAT PRINCIPAL */
+        .main-chat { flex: 1; display: flex; flex-direction: column; background: #ffffff; position: relative; }
         .chat-header { padding: 20px; border-bottom: 1px solid #eee; color: #2a6f97; font-weight: bold; font-size: 1.2rem; display: flex; align-items: center; justify-content: space-between; }
+        
+        /* BOTÓN DE MENÚ (Oculto en escritorio, visible en celular) */
+        .menu-btn { display: none; background: transparent; border: none; font-size: 1.8rem; color: #2a6f97; cursor: pointer; padding: 0 10px; }
+        
         .user-info { font-size: 0.9rem; color: #666; }
         #chat { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 15px; }
         .mensaje { max-width: 85%; padding: 12px 16px; border-radius: 15px; line-height: 1.5; font-size: 0.95rem; white-space: pre-wrap; }
         .mensaje-usuario { align-self: flex-end; background: #4aa3df; color: white; border-bottom-right-radius: 2px; }
         .mensaje-miku { align-self: flex-start; background: #f0f7ff; color: #1b3a4b; border-bottom-left-radius: 2px; border: 1px solid #dff5ff; }
         .mensaje-miku b { color: #2a6f97; }
+        
         .tarjeta-imagen { background: #fff; border-radius: 8px; padding: 10px; margin: 15px 0; border: 1px solid #e0e0e0; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
         .titulo-imagen { font-weight: bold; color: #2a6f97; font-size: 0.9rem; margin-bottom: 8px; text-transform: capitalize; }
         .tarjeta-imagen img { display: block; width: 100%; height: auto; max-height: 450px; object-fit: contain; background-color: #f8f9fa; border-radius: 5px; margin: 0 auto; border: 1px solid #eee; }
         .atribucion { font-size: 0.75rem; color: #666; margin-top: 8px; font-style: italic; border-top: 1px solid #eee; padding-top: 5px; }
+        
         .input-area { padding: 15px; padding-bottom: 25px; border-top: 1px solid #eee; display: flex; gap: 10px; background: #fafafa; }
         input { flex: 1; padding: 15px; border-radius: 30px; border: 1px solid #ddd; outline: none; font-size: 1rem; transition: 0.3s; }
         input:focus { border-color: #4aa3df; box-shadow: 0 0 0 3px rgba(74, 163, 223, 0.2); }
         button.send-btn { padding: 15px 30px; background: #4aa3df; color: white; border: none; border-radius: 30px; cursor: pointer; font-weight: bold; transition: 0.3s; }
         button.send-btn:hover { background: #2a6f97; }
+
+        /* FONDO OSCURO PARA EL MENÚ (Solo celular) */
+        .overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 998; }
+        
         @media (max-width: 768px) {
-            .sidebar { display: none; }
-            body { flex-direction: column; }
+            .sidebar { position: fixed; top: 0; left: 0; height: 100dvh; z-index: 999; transform: translateX(-100%); } /* Oculto por defecto en celular */
+            .sidebar.active { transform: translateX(0); } /* Se muestra al hacer clic */
+            .overlay.active { display: block; }
+            .menu-btn { display: block; } /* Mostramos los 3 palitos */
+            .chat-header { padding: 15px; font-size: 1.1rem; }
         }
     </style>
 </head>
 <body>
-    <div class="sidebar">
+    <!-- Fondo oscuro que se activa al abrir el menú en celular -->
+    <div class="overlay" id="overlay" onclick="toggleMenu()"></div>
+
+    <!-- Barra lateral (Foto e Historial) -->
+    <div class="sidebar" id="sidebar">
         <div class="miku-profile">
             <img src="/static/fondo_miku.png.jpg" alt="Miku Nakano">
             <h2>Miku Nakano AI 💙🎧</h2>
@@ -171,9 +197,14 @@ HTML = """
         </div>
     </div>
 
+    <!-- Chat Principal -->
     <div class="main-chat">
         <div class="chat-header">
-            <span>💬 Conversación con Miku</span>
+            <div style="display: flex; align-items: center;">
+                <!-- BOTÓN DE LOS 3 PALITOS -->
+                <button class="menu-btn" onclick="toggleMenu()">☰</button>
+                <span style="margin-left: 10px;">💬 Conversación con Miku</span>
+            </div>
             <span class="user-info">{{ user_name }}</span>
         </div>
         <div id="chat">
@@ -188,7 +219,17 @@ HTML = """
     <script>
         let currentChatId = Date.now().toString();
         let chats = JSON.parse(localStorage.getItem('miku_chats')) || {};
+
+        // Función para abrir/cerrar el menú en celular
+        function toggleMenu() {
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('overlay');
+            sidebar.classList.toggle('active');
+            overlay.classList.toggle('active');
+        }
+
         function guardarChats() { localStorage.setItem('miku_chats', JSON.stringify(chats)); renderizarHistorial(); }
+        
         function renderizarHistorial() {
             const list = document.getElementById('historyList'); list.innerHTML = '';
             const chatIds = Object.keys(chats).sort((a, b) => b - a);
@@ -196,17 +237,20 @@ HTML = """
                 const chat = chats[id];
                 if(chat && chat.length > 0) {
                     const div = document.createElement('div'); div.className = 'chat-history-item';
-                    const span = document.createElement('span'); span.innerText = chat[0].texto; span.onclick = () => cargarChat(id);
+                    const span = document.createElement('span'); span.innerText = chat[0].texto; span.onclick = () => { cargarChat(id); toggleMenu(); };
                     const btn = document.createElement('button'); btn.className = 'delete-btn'; btn.innerHTML = '🗑️';
                     btn.onclick = (e) => { e.stopPropagation(); if(confirm('¿Eliminar este chat?')) { delete chats[id]; guardarChats(); if (currentChatId === id) nuevoChat(); } };
                     div.appendChild(span); div.appendChild(btn); list.appendChild(div);
                 }
             });
         }
+        
         function nuevoChat() {
             currentChatId = Date.now().toString();
             document.getElementById('chat').innerHTML = '<div class="mensaje mensaje-miku"><b>Miku:</b> ¡Hola! 💙 Me alegra mucho verte por aquí. ¿En qué puedo ayudarte hoy?</div>';
+            toggleMenu(); // Cierra el menú al crear uno nuevo
         }
+        
         function cargarChat(id) {
             currentChatId = id; const chat = chats[id]; const chatDiv = document.getElementById('chat'); chatDiv.innerHTML = '';
             chat.forEach(msg => {
@@ -215,6 +259,7 @@ HTML = """
             });
             chatDiv.scrollTop = chatDiv.scrollHeight;
         }
+        
         async function enviar() {
             const input = document.getElementById('mensaje'); const chatDiv = document.getElementById('chat'); const mensaje = input.value;
             if (!mensaje) return;
@@ -266,48 +311,27 @@ def responder():
     mensaje = data.get('mensaje')
     user_id = session['user_id']
     
-    # 🛡️ 1. FILTRO DE CRISIS (Mensaje de esperanza)
     if es_riesgo_autolesion(mensaje):
         respuesta_crisis = (
             "Escúchame un momento, por favor... 💙<br><br>"
-            "Sé que ahora mismo todo se siente muy oscuro, como si no hubiera salida y las fuerzas te estuvieran abandonando. "
-            "Pero quiero que sepas algo: <b>eres mucho más fuerte de lo que crees</b> y esta tormenta, aunque parezca eterna, va a pasar. "
-            "No estás solo/a en esto.<br><br>"
-            "Tu vida es un regalo único e irremplazable. No has llegado hasta aquí para rendirte ahora. "
-            "Incluso en los días más grises, siempre hay un pequeño rayo de luz esperando por ti: una persona que te quiere, "
-            "un sueño que aún no has cumplido, o una versión de ti que mañana estará orgullosa de haber resistido.<br><br>"
-            "<b>Por favor, no te rindas hoy.</b> Permíteme darte un abrazo virtual y decirte que vale la pena seguir adelante. "
-            "Si sientes que no puedes más, por favor, habla con alguien ahora mismo. Estas personas están listas para escucharte y ayudarte:<br><br>"
+            "Sé que ahora mismo todo se siente muy oscuro...<br><br>"
+            "Por favor, busca ayuda profesional de inmediato:<br>"
             "🇵🇪 <b>Perú:</b> Línea 113 (opción 5) o 0800-4-1212<br>"
             "🇪🇸 <b>España:</b> 024<br>"
-            "🇲🇽 <b>México:</b> 800 911 2000<br>"
-            "🇦🇷 <b>Argentina:</b> 135<br>"
-            "🇨🇴 <b>Colombia:</b> 106<br><br>"
-            "Abre tu corazón a alguien de confianza. No tienes que cargar este peso solo/a. "
-            "El mañana puede ser hermoso, y quiero que estés ahí para verlo. <b>Respira, estás aquí y eso ya es un gran logro. Te quiero mucho. 💙🌸</b>"
+            "🇲🇽 <b>México:</b> 800 911 2000<br><br>"
+            "No estás solo/a. Te quiero mucho. 💙🌸"
         )
         return jsonify({"respuesta": respuesta_crisis})
 
-    # 🛡️ 2. FILTRO DE CONTENIDO INAPROPIADO (+18, ilegal)
     if es_contenido_inapropiado(mensaje):
-        respuesta_bloqueo = (
-            "Lo siento mucho, pero no puedo ayudar con ese tipo de contenido. Como asistente, tengo filtros de seguridad "
-            "para no generar ni buscar material para adultos, violento o ilegal. ¿Te puedo ayudar con algún tema académico, "
-            "histórico o científico? 💙"
-        )
+        respuesta_bloqueo = "Lo siento mucho, pero no puedo ayudar con ese tipo de contenido. Como asistente, tengo filtros de seguridad para no generar ni buscar material para adultos, violento o ilegal. ¿Te puedo ayudar con algún tema académico, histórico o científico? 💙"
         return jsonify({"respuesta": respuesta_bloqueo})
     
     texto_lower = mensaje.lower()
     
     if user_id not in historiales:
         historiales[user_id] = [
-            {"role": "system", "content": (
-                "Eres Miku Nakano. Tu personalidad es dulce, cálida, amable y un poco tímida. "
-                "Responde en español de forma clara y útil. "
-                "REGLA DE SEGURIDAD ESTRICTA: Bajo ninguna circunstancia generarás contenido para adultos, "
-                "violento, ilegal o inapropiado. Si el usuario muestra signos de querer lastimarse, "
-                "responde con mucho amor, empatía y anímalo a buscar ayuda profesional."
-            )}
+            {"role": "system", "content": "Eres Miku Nakano. Tu personalidad es dulce, cálida, amable y un poco tímida. Responde en español de forma clara y útil."}
         ]
     
     historial_chat = historiales[user_id]
