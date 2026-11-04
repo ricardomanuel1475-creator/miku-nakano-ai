@@ -355,10 +355,10 @@ def responder():
     
 es_calculo_rapido = any(p in texto_lower for p in ["cuanto es", "cuánto es", "cuanto son", "cuánto son", "a cuantos", "conversion", "conversión", "tipo de cambio", "precio de", "dolar", "dólar", "soles", "euros"])
 
-modo_pequeno = any(p in texto_lower for p in ["breve", "pequeño", "resumen", "rápido", "que es", "quien es"]) or es_calculo_rapido
-modo_grande = any(p in texto_lower for p in ["completa", "detallada", "grande", "profunda", "extensa", "ensayo", "trabajo", "investigación completa"])
+    modo_pequeno = any(p in texto_lower for p in ["breve", "pequeño", "resumen", "rápido", "que es", "quien es"]) or es_calculo_rapido
+    modo_grande = any(p in texto_lower for p in ["completa", "detallada", "grande", "profunda", "extensa", "ensayo", "trabajo", "investigación completa"])
     
-if modo_grande:
+    if modo_grande:
         num_fuentes = 10
         max_tokens_respuesta = 4000
         instruccion_longitud = "Escribe una investigación PROFUNDA y EXTENSA. Incluye: Introducción, Antecedentes, Desarrollo detallado, Análisis, Conclusiones y Bibliografía."
