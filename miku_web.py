@@ -15,7 +15,9 @@ app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1, x_
 app.config['SESSION_COOKIE_SECURE'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['SESSION_COOKIE_HTTPONLY'] = True
-app.secret_key = "MikuNakanoEsLaMejorAsistente2026"
+
+# 🛠️ CORRECCIÓN CLAVE: Usar variable de entorno para que la sesión no se pierda
+app.secret_key = os.environ.get('SECRET_KEY', 'MikuNakanoEsLaMejorAsistente2026')
 
 # ==========================================
 # CONFIGURACIÓN DE GOOGLE (AUTH)
@@ -107,7 +109,7 @@ def buscar_imagen_wikimedia(palabras_clave, limite=5):
 historiales = {}
 
 # ==========================================
-# LA INTERFAZ WEB (CON MENÚ DESLIZABLE PARA CELULAR)
+# LA INTERFAZ WEB (CON MENÚ DESLIZABLE Y DISEÑO ADAPTABLE)
 # ==========================================
 HTML = """
 <!DOCTYPE html>
@@ -121,7 +123,6 @@ HTML = """
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: 'Segoe UI', Arial, sans-serif; background-color: #f0f7ff; display: flex; height: 100dvh; overflow: hidden; }
         
-        /* BARRA LATERAL (Escritorio) */
         .sidebar { width: 320px; background: linear-gradient(180deg, #dff5ff 0%, #b3e0ff 100%); display: flex; flex-direction: column; padding: 15px; border-right: 2px solid #b3d9ff; flex-shrink: 0; overflow: hidden; transition: transform 0.3s ease; }
         
         .miku-profile { display: flex; flex-direction: column; align-items: center; padding-bottom: 15px; border-bottom: 1px solid #a0d0ff; margin-bottom: 15px; flex-shrink: 0; }
@@ -145,11 +146,9 @@ HTML = """
         #historyList::-webkit-scrollbar { width: 5px; }
         #historyList::-webkit-scrollbar-thumb { background: #a0d0ff; border-radius: 5px; }
 
-        /* CHAT PRINCIPAL */
         .main-chat { flex: 1; display: flex; flex-direction: column; background: #ffffff; position: relative; }
         .chat-header { padding: 20px; border-bottom: 1px solid #eee; color: #2a6f97; font-weight: bold; font-size: 1.2rem; display: flex; align-items: center; justify-content: space-between; }
         
-        /* BOTÓN DE MENÚ (Oculto en escritorio, visible en celular) */
         .menu-btn { display: none; background: transparent; border: none; font-size: 1.8rem; color: #2a6f97; cursor: pointer; padding: 0 10px; }
         
         .user-info { font-size: 0.9rem; color: #666; }
@@ -170,23 +169,20 @@ HTML = """
         button.send-btn { padding: 15px 30px; background: #4aa3df; color: white; border: none; border-radius: 30px; cursor: pointer; font-weight: bold; transition: 0.3s; }
         button.send-btn:hover { background: #2a6f97; }
 
-        /* FONDO OSCURO PARA EL MENÚ (Solo celular) */
         .overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 998; }
         
         @media (max-width: 768px) {
-            .sidebar { position: fixed; top: 0; left: 0; height: 100dvh; z-index: 999; transform: translateX(-100%); } /* Oculto por defecto en celular */
-            .sidebar.active { transform: translateX(0); } /* Se muestra al hacer clic */
+            .sidebar { position: fixed; top: 0; left: 0; height: 100dvh; z-index: 999; transform: translateX(-100%); }
+            .sidebar.active { transform: translateX(0); }
             .overlay.active { display: block; }
-            .menu-btn { display: block; } /* Mostramos los 3 palitos */
+            .menu-btn { display: block; }
             .chat-header { padding: 15px; font-size: 1.1rem; }
         }
     </style>
 </head>
 <body>
-    <!-- Fondo oscuro que se activa al abrir el menú en celular -->
     <div class="overlay" id="overlay" onclick="toggleMenu()"></div>
 
-    <!-- Barra lateral (Foto e Historial) -->
     <div class="sidebar" id="sidebar">
         <div class="miku-profile">
             <img src="/static/fondo_miku.png.jpg" alt="Miku Nakano">
@@ -199,11 +195,9 @@ HTML = """
         </div>
     </div>
 
-    <!-- Chat Principal -->
     <div class="main-chat">
         <div class="chat-header">
             <div style="display: flex; align-items: center;">
-                <!-- BOTÓN DE LOS 3 PALITOS -->
                 <button class="menu-btn" onclick="toggleMenu()">☰</button>
                 <span style="margin-left: 10px;">💬 Conversación con Miku</span>
             </div>
@@ -222,7 +216,6 @@ HTML = """
         let currentChatId = Date.now().toString();
         let chats = JSON.parse(localStorage.getItem('miku_chats')) || {};
 
-        // Función para abrir/cerrar el menú en celular
         function toggleMenu() {
             const sidebar = document.getElementById('sidebar');
             const overlay = document.getElementById('overlay');
@@ -250,7 +243,6 @@ HTML = """
         function nuevoChat() {
             currentChatId = Date.now().toString();
             document.getElementById('chat').innerHTML = '<div class="mensaje mensaje-miku"><b>Miku:</b> ¡Hola! 💙 Me alegra mucho verte por aquí. ¿En qué puedo ayudarte hoy?</div>';
-            // Si el menú está abierto en celular, lo cerramos
             if (document.getElementById('sidebar').classList.contains('active')) {
                 toggleMenu();
             }
@@ -283,7 +275,6 @@ HTML = """
         }
         renderizarHistorial();
 
-        // Registrar el Service Worker para que PWABuilder lo detecte
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('/sw.js')
@@ -380,6 +371,8 @@ def responder():
 
     if "busca" in texto_lower or "investiga" in texto_lower or "resumen" in texto_lower or "que es" in texto_lower:
         query = texto_lower.replace("miku", "").replace("busca", "").replace("investiga", "").replace("resumen", "").replace("hazme", "").replace("de", "").replace("sobre", "").replace("la", "").replace("el", "").replace("una", "").replace("un", "").replace("que es", "").replace("quien es", "").strip()
+             .replace("busca", "").replace("investiga", "").replace("resumen", "").replace("hazme", "").replace("de", "").replace("sobre", "").replace("la", "").replace("el", "").replace("una", "").replace("un", "").replace("que es", "").replace("quien es", "").strip()
+        
         if query:
             try:
                 resultados = DDGS().text(query, max_results=num_fuentes)
