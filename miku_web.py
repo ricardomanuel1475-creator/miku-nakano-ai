@@ -370,15 +370,13 @@ def serve_sw():
 
     if "busca" in texto_lower or "investiga" in texto_lower or "resumen" in texto_lower:
         query = texto_lower.replace("miku", "").replace("busca", "").replace("investiga", "").replace("resumen", "").replace("hazme", "").replace("de", "").replace("sobre", "").replace("la", "").replace("el", "").replace("una", "").replace("un", "").replace("que es", "").replace("quien es", "").strip()
-        
-        if query:
-            try:
-                resultados = DDGS().text(query, max_results=num_fuentes)
-                info_web = "\n".join([f"- {r['title']}: {r['body']}" for r in resultados])
-                historial_chat.append({"role": "system", "content": f"Información de internet ({num_fuentes} fuentes):\n{info_web}"})
-            except: pass
-
-    historial_chat.append({"role": "system", "content": instruccion_longitud})
+    
+    if query:
+        try:
+            resultados = DDGS().text(query, max_results=num_fuentes)
+            info_web = "\n".join([f"- {r['title']}: {r['body']}" for r in resultados])
+            historial_chat.append({"role": "system", "content": f"Información de internet ({num_fuentes} fuentes):\n{info_web}"})
+        except: pass
 
     instruccion_imagenes = (
         "IMPORTANTE: Para hacer tu respuesta más visual, añade etiquetas secretas con imágenes. "
