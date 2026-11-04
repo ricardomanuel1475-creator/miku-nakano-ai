@@ -427,5 +427,5 @@ if query:
     except Exception as e:
         return jsonify({"respuesta": f"Error: {e}"})
 
-if __name__ == '__main__':
+if if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
