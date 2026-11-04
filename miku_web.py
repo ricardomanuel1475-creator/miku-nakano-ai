@@ -400,9 +400,10 @@ if query:
         respuesta_cruda = completion.choices[0].message.content
         
         patron = r'\[IMG:\s*(.*?)\]'
+       
         partes = re.split(patron, respuesta_cruda)
         
-                respuesta_final = ""
+        respuesta_final = ""
         for i, parte in enumerate(partes):
             if i % 2 == 0:
                 respuesta_final += limpiar_texto(parte) + "\n"
