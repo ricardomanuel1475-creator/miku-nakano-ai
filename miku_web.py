@@ -411,23 +411,15 @@ def serve_sw():
             else:
                 palabras_clave = parte.strip()
                 imagenes = buscar_imagen_wikimedia(palabras_clave, limite=5)
-                
                 if imagenes:
                     img = imagenes[0] 
-                    tarjeta = f'''
-                    <div class="tarjeta-imagen">
-                        <div class="titulo-imagen">📷 {img["nombre"]}</div>
-                        <img src="{img["url"]}" alt="{palabras_clave}">
-                        <div class="atribucion">Fuente: Wikimedia Commons | Autor: {img["autor"]} | Licencia: {img["licencia"]}</div>
-                    </div>
-                    '''
+                    tarjeta = f'<div class="tarjeta-imagen"><div class="titulo-imagen">📷 {img["nombre"]}</div><img src="{img["url"]}" alt="{palabras_clave}"><div class="atribucion">Fuente: Wikimedia Commons | Autor: {img["autor"]} | Licencia: {img["licencia"]}</div></div>'
                     respuesta_final += tarjeta + "\n"
         
         historial_chat.append({"role": "assistant", "content": respuesta_final})
-        
         return jsonify({"respuesta": respuesta_final})
     except Exception as e:
         return jsonify({"respuesta": f"Error: {e}"})
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)          
+    app.run(host='0.0.0.0', port=5000)
