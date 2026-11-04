@@ -23,8 +23,8 @@ app.secret_key = os.environ.get('SECRET_KEY', 'MikuNakanoEsLaMejorAsistente2026'
 # CONFIGURACIÓN DE GOOGLE (AUTH)
 # ==========================================
 app.config['GOOGLE_CLIENT_ID'] = "183518295635-devpot1v7r6v8902r0d53vdqqatjeu7a.apps.googleusercontent.com"
-# Usa la nueva clave de Google que guardaste en Render
-app.config['GOOGLE_CLIENT_SECRET'] = os.environ.get('GOOGLE_CLIENT_SECRET', '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')
+# Usa la nueva clave de Google
+app.config['GOOGLE_CLIENT_SECRET'] = "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"
 
 oauth = OAuth(app)
 oauth.register(
@@ -36,8 +36,8 @@ oauth.register(
 # ==========================================
 # CONFIGURACIÓN DE LA IA (GROQ)
 # ==========================================
-# Usa la nueva clave de Groq que guardaste en Render
-GROQ_API_KEY = os.environ.get('GROQ_API_KEY', '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')
+# Usa la nueva clave de Groq
+GROQ_API_KEY = "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"
 cliente = Groq(api_key=GROQ_API_KEY)
 
 # ==========================================
@@ -369,8 +369,7 @@ def responder():
 
     query = ""
     if "busca" in texto_lower or "investiga" in texto_lower or "resumen" in texto_lower:
-        query = texto_lower.replace("miku", "").replace("busca", "").replace("investiga", "").replace("resumen", "").replace("hazme", "").replace("de", "").replace("sobre", "").replace("la", "").repla
-        .replace("busca", "").replace("investiga", "").replace("resumen", "").replace("hazme", "").replace("de", "").replace("sobre", "").replace("la", "").replace("el", "").replace("una", "").replace("un", "").replace("que es", "").replace("quien es", "").strip()
+        query = texto_lower.replace("miku", "").replace("busca", "").replace("investiga", "").replace("resumen", "").replace("hazme", "").replace("de", "").replace("sobre", "").replace("la", "").replace("el", "").replace("una", "").replace("un", "").replace("que es", "").replace("quien es", "").strip()
         
         if query:
             try:
