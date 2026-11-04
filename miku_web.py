@@ -16,13 +16,14 @@ app.config['SESSION_COOKIE_SECURE'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 
-# 🛠️ CORRECCIÓN CLAVE: Usar variable de entorno para que la sesión no se pierda
+# Usar variable de entorno para que la sesión no se pierda en Render
 app.secret_key = os.environ.get('SECRET_KEY', 'MikuNakanoEsLaMejorAsistente2026')
 
 # ==========================================
 # CONFIGURACIÓN DE GOOGLE (AUTH)
 # ==========================================
 app.config['GOOGLE_CLIENT_ID'] = "183518295635-devpot1v7r6v8902r0d53vdqqatjeu7a.apps.googleusercontent.com"
+# Usa la nueva clave de Google que guardaste en Render
 app.config['GOOGLE_CLIENT_SECRET'] = os.environ.get('GOOGLE_CLIENT_SECRET', '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')
 
 oauth = OAuth(app)
@@ -35,7 +36,8 @@ oauth.register(
 # ==========================================
 # CONFIGURACIÓN DE LA IA (GROQ)
 # ==========================================
-GROQ_API_KEY = "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"
+# Usa la nueva clave de Groq que guardaste en Render
+GROQ_API_KEY = os.environ.get('GROQ_API_KEY', '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')
 cliente = Groq(api_key=GROQ_API_KEY)
 
 # ==========================================
@@ -308,9 +310,6 @@ def authorize():
         session['user_id'] = user_info.get('email')
     return redirect('/')
 
-# ==========================================
-# RUTAS PARA PWABUILDER (MANIFEST Y SERVICE WORKER)
-# ==========================================
 @app.route('/manifest.json')
 def serve_manifest():
     return send_from_directory('static', 'manifest.json')
@@ -320,7 +319,7 @@ def serve_sw():
     return send_from_directory('static', 'sw.js')
 
 @app.route('/responder', methods=['POST'])
-  def responder():
+def responder():
     if 'user_id' not in session:
         return jsonify({"respuesta": "Error: Debes iniciar sesión."})
     data = request.get_json()
@@ -351,8 +350,8 @@ def serve_sw():
         ]
     
     historial_chat = historiales[user_id]
-    query = ""
     
+    # Lógica simplificada para respuestas cortas
     es_calculo_rapido = any(p in texto_lower for p in ["cuanto es", "cuánto es", "cuanto son", "cuánto son", "a cuantos", "conversion", "conversión", "tipo de cambio", "precio de", "dolar", "dólar", "soles", "euros"])
     
     if es_calculo_rapido:
@@ -368,15 +367,19 @@ def serve_sw():
         max_tokens_respuesta = 1500
         instruccion_longitud = "Escribe una investigación MEDIANA. Incluye una introducción, 2 o 3 apartados con datos importantes y una conclusión."
 
+    query = ""
     if "busca" in texto_lower or "investiga" in texto_lower or "resumen" in texto_lower:
-        query = texto_lower.replace("miku", "").replace("busca", "").replace("investiga", "").replace("resumen", "").replace("hazme", "").replace("de", "").replace("sobre", "").replace("la", "").replace("el", "").replace("una", "").replace("un", "").replace("que es", "").replace("quien es", "").strip()
-    
-    if query:
-        try:
-            resultados = DDGS().text(query, max_results=num_fuentes)
-            info_web = "\n".join([f"- {r['title']}: {r['body']}" for r in resultados])
-            historial_chat.append({"role": "system", "content": f"Información de internet ({num_fuentes} fuentes):\n{info_web}"})
-        except: pass
+        query = texto_lower.replace("miku", "").replace("busca", "").replace("investiga", "").replace("resumen", "").replace("hazme", "").replace("de", "").replace("sobre", "").replace("la", "").repla
+        .replace("busca", "").replace("investiga", "").replace("resumen", "").replace("hazme", "").replace("de", "").replace("sobre", "").replace("la", "").replace("el", "").replace("una", "").replace("un", "").replace("que es", "").replace("quien es", "").strip()
+        
+        if query:
+            try:
+                resultados = DDGS().text(query, max_results=num_fuentes)
+                info_web = "\n".join([f"- {r['title']}: {r['body']}" for r in resultados])
+                historial_chat.append({"role": "system", "content": f"Información de internet ({num_fuentes} fuentes):\n{info_web}"})
+            except: pass
+
+    historial_chat.append({"role": "system", "content": instruccion_longitud})
 
     instruccion_imagenes = (
         "IMPORTANTE: Para hacer tu respuesta más visual, añade etiquetas secretas con imágenes. "
@@ -411,10 +414,17 @@ def serve_sw():
                 imagenes = buscar_imagen_wikimedia(palabras_clave, limite=5)
                 if imagenes:
                     img = imagenes[0] 
-                    tarjeta = f'<div class="tarjeta-imagen"><div class="titulo-imagen">📷 {img["nombre"]}</div><img src="{img["url"]}" alt="{palabras_clave}"><div class="atribucion">Fuente: Wikimedia Commons | Autor: {img["autor"]} | Licencia: {img["licencia"]}</div></div>'
+                    tarjeta = f'''
+                    <div class="tarjeta-imagen">
+                        <div class="titulo-imagen">📷 {img["nombre"]}</div>
+                        <img src="{img["url"]}" alt="{palabras_clave}">
+                        <div class="atribucion">Fuente: Wikimedia Commons | Autor: {img["autor"]} | Licencia: {img["licencia"]}</div>
+                    </div>
+                    '''
                     respuesta_final += tarjeta + "\n"
         
         historial_chat.append({"role": "assistant", "content": respuesta_final})
+        
         return jsonify({"respuesta": respuesta_final})
     except Exception as e:
         return jsonify({"respuesta": f"Error: {e}"})
