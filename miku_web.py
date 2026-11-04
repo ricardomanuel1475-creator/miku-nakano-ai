@@ -369,16 +369,15 @@ def responder():
         max_tokens_respuesta = 2000
         instruccion_longitud = "Escribe una investigación MEDIANA. Incluye una introducción, 2 o 3 apartados con datos importantes y una conclusión."
 
-    if "busca" in texto_lower or "investiga" in texto_lower or "resumen" in texto_lower or "que es" in texto_lower:
+    if "busca" in texto_lower or "investiga" in texto_lower:
         query = texto_lower.replace("miku", "").replace("busca", "").replace("investiga", "").replace("resumen", "").replace("hazme", "").replace("de", "").replace("sobre", "").replace("la", "").replace("el", "").replace("una", "").replace("un", "").replace("que es", "").replace("quien es", "").strip()
-             .replace("busca", "").replace("investiga", "").replace("resumen", "").replace("hazme", "").replace("de", "").replace("sobre", "").replace("la", "").replace("el", "").replace("una", "").replace("un", "").replace("que es", "").replace("quien es", "").strip()
-        
-        if query:
-            try:
-                resultados = DDGS().text(query, max_results=num_fuentes)
-                info_web = "\n".join([f"- {r['title']}: {r['body']}" for r in resultados])
-                historial_chat.append({"role": "system", "content": f"Información de internet ({num_fuentes} fuentes):\n{info_web}"})
-            except: pass
+    
+    if query:
+        try:
+            resultados = DDGS().text(query, max_results=num_fuentes)
+            info_web = "\n".join([f"- {r['title']}: {r['body']}" for r in resultados])
+            historial_chat.append({"role": "system", "content": f"Información de internet ({num_fuentes} fuentes):\n{info_web}"})
+        except: pass
 
     historial_chat.append({"role": "system", "content": instruccion_longitud})
 
