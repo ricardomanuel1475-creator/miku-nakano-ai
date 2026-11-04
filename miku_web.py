@@ -402,7 +402,7 @@ if query:
         patron = r'\[IMG:\s*(.*?)\]'
         partes = re.split(patron, respuesta_cruda)
         
-        respuesta_final = ""
+                respuesta_final = ""
         for i, parte in enumerate(partes):
             if i % 2 == 0:
                 respuesta_final += limpiar_texto(parte) + "\n"
@@ -427,5 +427,5 @@ if query:
     except Exception as e:
         return jsonify({"respuesta": f"Error: {e}"})
 
-if if __name__ == '__main__':
+if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
