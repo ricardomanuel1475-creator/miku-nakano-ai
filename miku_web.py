@@ -320,7 +320,7 @@ def serve_sw():
     return send_from_directory('static', 'sw.js')
 
 @app.route('/responder', methods=['POST'])
-def responder():
+  def responder():
     if 'user_id' not in session:
         return jsonify({"respuesta": "Error: Debes iniciar sesión."})
     data = request.get_json()
@@ -353,28 +353,30 @@ def responder():
     historial_chat = historiales[user_id]
     query = ""
     
-# Lógica simplificada para respuestas cortas en preguntas rápidas
-es_calculo_rapido = any(p in texto_lower for p in ["cuanto es", "cuánto es", "cuanto son", "cuánto son", "a cuantos", "conversion", "conversión", "tipo de cambio", "precio de", "dolar", "dólar", "soles", "euros"])
-
-if es_calculo_rapido:
-    num_fuentes = 2
-    max_tokens_respuesta = 400
-    instruccion_longitud = "Escribe una respuesta SÚPER BREVE y DIRECTA, solo dando el dato exacto sin explicaciones extra."
-elif "completa" in texto_lower or "detallada" in texto_lower or "grande" in texto_lower or "profunda" in texto_lower or "extensa" in texto_lower:
-    num_fuentes = 10
-    max_tokens_respuesta = 4000
-    instruccion_longitud = "Escribe una investigación PROFUNDA y EXTENSA. Incluye: Introducción, Antecedentes, Desarrollo detallado, Análisis, Conclusiones y Bibliografía."
-else:
-    num_fuentes = 5
-    max_tokens_respuesta = 1500
-    instruccion_longitud = "Escribe una investigación MEDIANA. Incluye una introducción, 2 o 3 apartados con datos importantes y una conclusión."
+    es_calculo_rapido = any(p in texto_lower for p in ["cuanto es", "cuánto es", "cuanto son", "cuánto son", "a cuantos", "conversion", "conversión", "tipo de cambio", "precio de", "dolar", "dólar", "soles", "euros"])
     
-if query:
-    try:
-        resultados = DDGS().text(query, max_results=num_fuentes)
-        info_web = "\n".join([f"- {r['title']}: {r['body']}" for r in resultados])
-        historial_chat.append({"role": "system", "content": f"Información de internet ({num_fuentes} fuentes):\n{info_web}"})
-    except: pass
+    if es_calculo_rapido:
+        num_fuentes = 2
+        max_tokens_respuesta = 400
+        instruccion_longitud = "Escribe una respuesta SÚPER BREVE y DIRECTA, solo dando el dato exacto sin explicaciones extra."
+    elif "completa" in texto_lower or "detallada" in texto_lower or "grande" in texto_lower or "profunda" in texto_lower or "extensa" in texto_lower:
+        num_fuentes = 10
+        max_tokens_respuesta = 4000
+        instruccion_longitud = "Escribe una investigación PROFUNDA y EXTENSA. Incluye: Introducción, Antecedentes, Desarrollo detallado, Análisis, Conclusiones y Bibliografía."
+    else:
+        num_fuentes = 5
+        max_tokens_respuesta = 1500
+        instruccion_longitud = "Escribe una investigación MEDIANA. Incluye una introducción, 2 o 3 apartados con datos importantes y una conclusión."
+
+    if "busca" in texto_lower or "investiga" in texto_lower or "resumen" in texto_lower:
+        query = texto_lower.replace("miku", "").replace("busca", "").replace("investiga", "").replace("resumen", "").replace("hazme", "").replace("de", "").replace("sobre", "").replace("la", "").replace("el", "").replace("una", "").replace("un", "").replace("que es", "").replace("quien es", "").strip()
+        
+        if query:
+            try:
+                resultados = DDGS().text(query, max_results=num_fuentes)
+                info_web = "\n".join([f"- {r['title']}: {r['body']}" for r in resultados])
+                historial_chat.append({"role": "system", "content": f"Información de internet ({num_fuentes} fuentes):\n{info_web}"})
+            except: pass
 
     historial_chat.append({"role": "system", "content": instruccion_longitud})
 
@@ -400,7 +402,6 @@ if query:
         respuesta_cruda = completion.choices[0].message.content
         
         patron = r'\[IMG:\s*(.*?)\]'
-       
         partes = re.split(patron, respuesta_cruda)
         
         respuesta_final = ""
@@ -429,4 +430,4 @@ if query:
         return jsonify({"respuesta": f"Error: {e}"})
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    app.run(host='0.0.0.0', port=5000)          
