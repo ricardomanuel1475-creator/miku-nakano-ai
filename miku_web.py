@@ -34,7 +34,7 @@ oauth.register(
 # ==========================================
 # CONFIGURACIÓN DE LA IA (GROQ)
 # ==========================================
-GROQ_API_KEY = "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"
+GROQ_API_KEY = "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"
 cliente = Groq(api_key=GROQ_API_KEY)
 
 # ==========================================
