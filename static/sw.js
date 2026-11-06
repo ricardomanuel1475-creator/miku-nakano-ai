@@ -1,19 +1,30 @@
-const CACHE_NAME = 'miku-cache-v1';
-const urlsToCache = [
-  '/',
-  '/static/fondo_miku.png.jpg'
-];
+const CACHE_NAME = 'quintillizas-ai-v2'; // Si haces cambios grandes, cambia el v2 por v3, v4, etc.
 
 self.addEventListener('install', event => {
+  // Fuerza al nuevo Service Worker a activarse inmediatamente
+  self.skipWaiting();
+});
+
+self.addEventListener('activate', event => {
+  // Elimina las cachés viejas
   event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then(cache => cache.addAll(urlsToCache))
+    caches.keys().then(cacheNames => {
+      return Promise.all(
+        cacheNames.map(cacheName => {
+          if (cacheName !== CACHE_NAME) {
+            return caches.delete(cacheName);
+          }
+        })
+      );
+    }).then(() => self.clients.claim())
   );
 });
 
 self.addEventListener('fetch', event => {
+  // Intenta buscar en la red primero, si falla, usa la caché
   event.respondWith(
-    caches.match(event.request)
-      .then(response => response || fetch(event.request))
+    fetch(event.request).catch(() => {
+      return caches.match(event.request);
+    })
   );
 });
