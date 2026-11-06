@@ -215,13 +215,12 @@ HTML = """
                 <span style="margin-left: 10px;">💬 Conversación con <span id="header-name">Miku</span></span>
             </div>
             
-            <!-- BOTÓN PARA CAMBIAR DE HERMANA -->
             <button class="switch-btn" onclick="abrirModal()">Cambiar Hermana</button>
             
             <span class="user-info">{{ user_name }}</span>
         </div>
         <div id="chat">
-            <div class="mensaje mensaje-miku"><b>Miku:</b> ¡Hola! 💙 Me alegra mucho verte por aquí. ¿En qué puedo ayudarte hoy?</div>
+            <div class="mensaje mensaje-miku"><b>Miku:</b> ¡Hola! 💙 Soy Miku. Me alegra mucho verte por aquí. ¿En qué te puedo ayudar hoy?</div>
         </div>
         <div class="input-area">
             <input type="text" id="mensaje" placeholder="Escribe algo..." onkeypress="if(event.key === 'Enter') enviar()">
@@ -231,8 +230,18 @@ HTML = """
 
     <script>
         let currentChatId = Date.now().toString();
-        let chats = JSON.parse(localStorage.getItem('miku_chats')) || {};
         let currentSister = localStorage.getItem('miku_hermana') || "Miku";
+        
+        let chats = JSON.parse(localStorage.getItem('miku_chats_' + currentSister)) || {};
+
+        // Saludos cálidos y personalizados
+        const saludos = {
+            "Ichika": "¡Hola! 💙 Soy Ichika. Me alegra mucho verte. ¿En qué te gustaría que te ayudara hoy?",
+            "Nino": "¡Hola! Soy Nino. Qué bueno que estés aquí. Dime, ¿qué necesitas que resuelva para ti hoy? 💙",
+            "Miku": "¡Hola! 💙 Soy Miku. Me alegra mucho verte por aquí. ¿En qué te puedo ayudar hoy?",
+            "Yotsuba": "¡Holaaa! 🌟 Soy Yotsuba. ¡Qué emoción verte! ¿En qué te puedo echar una mano hoy?",
+            "Itsuki": "Buenas tardes. Soy Itsuki. Es un placer saludarte. ¿En qué te puedo ser de ayuda hoy? 💙"
+        };
 
         function toggleMenu() {
             document.getElementById('sidebar').classList.toggle('active');
@@ -246,16 +255,29 @@ HTML = """
             document.getElementById('modal-selector').style.display = 'none';
             document.getElementById('overlay-modal').style.display = 'none';
         }
+        
         function cambiarHermana(nombre, imagen) {
+            localStorage.setItem('miku_chats_' + currentSister, JSON.stringify(chats));
             currentSister = nombre;
             localStorage.setItem('miku_hermana', nombre);
+            chats = JSON.parse(localStorage.getItem('miku_chats_' + currentSister)) || {};
+            
             document.getElementById('sidebar-name').innerText = nombre + " Nakano AI";
             document.getElementById('header-name').innerText = nombre;
             document.getElementById('sidebar-img').src = "/static/" + imagen;
-            document.getElementById('chat').innerHTML = `<div class="mensaje mensaje-miku"><b>${nombre}:</b> ¡Hola! Soy ${nombre}. ¿En qué te puedo ayudar hoy?</div>`;
+            
+            currentChatId = Date.now().toString();
+            document.getElementById('chat').innerHTML = `<div class="mensaje mensaje-miku"><b>${nombre}:</b> ${saludos[nombre]}</div>`;
+            
+            renderizarHistorial();
             cerrarModal();
         }
-        function guardarChats() { localStorage.setItem('miku_chats', JSON.stringify(chats)); renderizarHistorial(); }
+
+        function guardarChats() { 
+            localStorage.setItem('miku_chats_' + currentSister, JSON.stringify(chats)); 
+            renderizarHistorial(); 
+        }
+        
         function renderizarHistorial() {
             const list = document.getElementById('historyList'); list.innerHTML = '';
             const chatIds = Object.keys(chats).sort((a, b) => b - a);
@@ -270,19 +292,22 @@ HTML = """
                 }
             });
         }
+        
         function nuevoChat() {
             currentChatId = Date.now().toString();
-            document.getElementById('chat').innerHTML = `<div class="mensaje mensaje-miku"><b>${currentSister}:</b> ¡Hola! Soy ${currentSister}. ¿En qué te puedo ayudar hoy?</div>`;
+            document.getElementById('chat').innerHTML = `<div class="mensaje mensaje-miku"><b>${currentSister}:</b> ${saludos[currentSister]}</div>`;
             if (document.getElementById('sidebar').classList.contains('active')) toggleMenu();
         }
+        
         function cargarChat(id) {
             currentChatId = id; const chat = chats[id]; const chatDiv = document.getElementById('chat'); chatDiv.innerHTML = '';
             chat.forEach(msg => {
                 if (msg.role === 'user') chatDiv.innerHTML += `<div class="mensaje mensaje-usuario"><b>Tú:</b> ${msg.texto}</div>`;
-                else chatDiv.innerHTML += `<div class="mensaje mensaje-miku"><b>${msg.hermana || 'Miku'}:</b> ${msg.html}</div>`;
+                else chatDiv.innerHTML += `<div class="mensaje mensaje-miku"><b>${msg.hermana || currentSister}:</b> ${msg.html}</div>`;
             });
             chatDiv.scrollTop = chatDiv.scrollHeight;
         }
+        
         async function enviar() {
             const input = document.getElementById('mensaje'); const chatDiv = document.getElementById('chat'); const mensaje = input.value;
             if (!mensaje) return;
@@ -293,6 +318,7 @@ HTML = """
             const idPensando = 'pensando-' + Date.now();
             chatDiv.innerHTML += `<div class="mensaje mensaje-miku" id="${idPensando}"><b>${currentSister}:</b> Investigando... 🔍</div>`;
             chatDiv.scrollTop = chatDiv.scrollHeight; guardarChats();
+
             let memoriaGlobal = "";
             for (const id in chats) {
                 if (id !== currentChatId && chats[id].length > 0) {
@@ -300,6 +326,7 @@ HTML = """
                     if (ultimo.role === 'user') memoriaGlobal += `El usuario pregunto antes: "${ultimo.texto}". `;
                 }
             }
+
             const response = await fetch('/responder', { 
                 method: 'POST', 
                 headers: { 'Content-Type': 'application/json' }, 
@@ -316,10 +343,11 @@ HTML = """
             document.getElementById('sidebar-img').src = "/static/" + fotos[currentSister];
             document.getElementById('sidebar-name').innerText = currentSister + " Nakano AI";
             document.getElementById('header-name').innerText = currentSister;
-            document.getElementById('chat').innerHTML = `<div class="mensaje mensaje-miku"><b>${currentSister}:</b> ¡Hola! Soy ${currentSister}. ¿En qué te puedo ayudar hoy?</div>`;
+            document.getElementById('chat').innerHTML = `<div class="mensaje mensaje-miku"><b>${currentSister}:</b> ${saludos[currentSister]}</div>`;
         }
         
         renderizarHistorial();
+        
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('/sw.js').catch(error => console.log('Fallo SW:', error));
