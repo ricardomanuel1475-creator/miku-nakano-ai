@@ -83,6 +83,9 @@ def buscar_imagen_wikimedia(palabras_clave, limite=5):
 
 historiales = {}
 
+# ==========================================
+# LA INTERFAZ WEB
+# ==========================================
 HTML = """
 <!DOCTYPE html>
 <html>
@@ -170,24 +173,24 @@ HTML = """
     <div class="modal-selector" id="modal-selector">
         <h3>Elige a tu hermana favorita</h3>
         <div class="sisters-grid">
-            <div class="sister-card" onclick="cambiarHermana('Ichika', 'ichika.png')">
-                <img src="/static/ichika.png" alt="Ichika">
+            <div class="sister-card" onclick="cambiarHermana('Ichika', 'ichika.jpg')">
+                <img src="/static/ichika.jpg" alt="Ichika">
                 <p>Ichika (Matemáticas)</p>
             </div>
-            <div class="sister-card" onclick="cambiarHermana('Nino', 'nino.png')">
-                <img src="/static/nino.png" alt="Nino">
+            <div class="sister-card" onclick="cambiarHermana('Nino', 'nino.jpg')">
+                <img src="/static/nino.jpg" alt="Nino">
                 <p>Nino (Inglés)</p>
             </div>
-            <div class="sister-card" onclick="cambiarHermana('Miku', 'miku.png')">
-                <img src="/static/miku.png" alt="Miku">
+            <div class="sister-card" onclick="cambiarHermana('Miku', 'miku.webp')">
+                <img src="/static/miku.webp" alt="Miku">
                 <p>Miku (Historia)</p>
             </div>
-            <div class="sister-card" onclick="cambiarHermana('Yotsuba', 'yotsuba.png')">
-                <img src="/static/yotsuba.png" alt="Yotsuba">
+            <div class="sister-card" onclick="cambiarHermana('Yotsuba', 'yotsuba.jpg')">
+                <img src="/static/yotsuba.jpg" alt="Yotsuba">
                 <p>Yotsuba (Salud)</p>
             </div>
-            <div class="sister-card" onclick="cambiarHermana('Itsuki', 'itsuki.png')">
-                <img src="/static/itsuki.png" alt="Itsuki">
+            <div class="sister-card" onclick="cambiarHermana('Itsuki', 'itsuki.jpg')">
+                <img src="/static/itsuki.jpg" alt="Itsuki">
                 <p>Itsuki (Ciencias)</p>
             </div>
         </div>
@@ -195,7 +198,7 @@ HTML = """
 
     <div class="sidebar" id="sidebar">
         <div class="profile-header">
-            <img id="sidebar-img" src="/static/miku.png" alt="Miku Nakano">
+            <img id="sidebar-img" src="/static/miku.webp" alt="Miku Nakano">
             <h2 id="sidebar-name">Miku Nakano AI 💙🎧</h2>
         </div>
         <div class="history-section">
@@ -306,7 +309,7 @@ HTML = """
         }
         
         if (currentSister !== "Miku") {
-            const fotos = { "Ichika": "ichika.png", "Nino": "nino.png", "Miku": "miku.png", "Yotsuba": "yotsuba.png", "Itsuki": "itsuki.png" };
+            const fotos = { "Ichika": "ichika.jpg", "Nino": "nino.jpg", "Miku": "miku.webp", "Yotsuba": "yotsuba.jpg", "Itsuki": "itsuki.jpg" };
             document.getElementById('sidebar-img').src = "/static/" + fotos[currentSister];
             document.getElementById('sidebar-name').innerText = currentSister + " Nakano AI";
             document.getElementById('header-name').innerText = currentSister;
