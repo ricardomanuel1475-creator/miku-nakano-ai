@@ -18,6 +18,16 @@ app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.secret_key = os.environ.get('SECRET_KEY', 'MikuNakanoEsLaMejorAsistente2026')
 
 # ==========================================
+# EVITAR CACHÉ (Para que se actualice solo)
+# ==========================================
+@app.after_request
+def add_header(response):
+    response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, post-check=0, pre-check=0, max-age=0'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '-1'
+    return response
+
+# ==========================================
 # CONFIGURACIÓN DE GOOGLE (AUTH)
 # ==========================================
 app.config['GOOGLE_CLIENT_ID'] = "183518295635-devpot1v7r6v8902r0d53vdqqatjeu7a.apps.googleusercontent.com"
@@ -234,7 +244,6 @@ HTML = """
         
         let chats = JSON.parse(localStorage.getItem('miku_chats_' + currentSister)) || {};
 
-        // Saludos cálidos y personalizados
         const saludos = {
             "Ichika": "¡Hola! 💙 Soy Ichika. Me alegra mucho verte. ¿En qué te gustaría que te ayudara hoy?",
             "Nino": "¡Hola! Soy Nino. Qué bueno que estés aquí. Dime, ¿qué necesitas que resuelva para ti hoy? 💙",
