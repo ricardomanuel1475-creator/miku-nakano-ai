@@ -15,7 +15,6 @@ app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1, x_
 app.config['SESSION_COOKIE_SECURE'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['SESSION_COOKIE_HTTPONLY'] = True
-
 app.secret_key = os.environ.get('SECRET_KEY', 'MikuNakanoEsLaMejorAsistente2026')
 
 # ==========================================
@@ -32,7 +31,7 @@ oauth.register(
 )
 
 # ==========================================
-# CONFIGURACIÓN DE LA IA (GROQ)
+# CONFIGURACIÓN DE LA IA (GROQ) - TU CLAVE NUEVA
 # ==========================================
 GROQ_API_KEY = "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"
 cliente = Groq(api_key=GROQ_API_KEY)
@@ -85,70 +84,124 @@ def buscar_imagen_wikimedia(palabras_clave, limite=5):
 historiales = {}
 
 # ==========================================
-# LA INTERFAZ WEB (CON MEMORIA ENTRE CHATS)
+# LA INTERFAZ WEB (CON SELECTOR DE HERMANAS Y MEMORIA)
 # ==========================================
 HTML = """
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Miku Nakano AI</title>
+    <title>Quintillizas AI</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#4aa3df">
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: 'Segoe UI', Arial, sans-serif; background-color: #f0f7ff; display: flex; height: 100dvh; overflow: hidden; }
+        
         .sidebar { width: 320px; background: linear-gradient(180deg, #dff5ff 0%, #b3e0ff 100%); display: flex; flex-direction: column; padding: 15px; border-right: 2px solid #b3d9ff; flex-shrink: 0; overflow: hidden; transition: transform 0.3s ease; }
-        .miku-profile { display: flex; flex-direction: column; align-items: center; padding-bottom: 15px; border-bottom: 1px solid #a0d0ff; margin-bottom: 15px; flex-shrink: 0; }
-        .miku-profile img { width: 210px; height: 210px; object-fit: cover; border-radius: 25px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); border: 4px solid #fff; }
-        .miku-profile h2 { margin-top: 12px; color: #2a6f97; font-size: 1.4rem; text-align: center; }
+        
+        .profile-header { display: flex; flex-direction: column; align-items: center; padding-bottom: 15px; border-bottom: 1px solid #a0d0ff; margin-bottom: 15px; flex-shrink: 0; }
+        .profile-header img { width: 180px; height: 180px; object-fit: cover; border-radius: 25px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); border: 4px solid #fff; }
+        .profile-header h2 { margin-top: 12px; color: #2a6f97; font-size: 1.4rem; text-align: center; }
+        
         .history-section { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
         .history-title { font-size: 0.9rem; font-weight: bold; color: #2a6f97; margin-bottom: 10px; }
         .new-chat-btn { background: #4aa3df; color: white; border: none; padding: 10px 12px; border-radius: 8px; cursor: pointer; font-size: 0.85rem; width: 100%; margin-bottom: 10px; font-weight: bold; transition: 0.3s; }
         .new-chat-btn:hover { background: #2a6f97; }
+        
         #historyList { overflow-y: auto; flex: 1; padding-right: 5px; }
         .chat-history-item { display: flex; justify-content: space-between; align-items: center; padding: 10px; border-radius: 8px; margin-bottom: 5px; cursor: pointer; font-size: 0.85rem; color: #333; background: #fff; border: 1px solid #dff5ff; transition: 0.2s; }
         .chat-history-item:hover { background: #e0f0ff; color: #2a6f97; border-color: #4aa3df; }
         .chat-history-item span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; }
+        
         .delete-btn { display: none; background: transparent; border: none; color: #ff4d4d; cursor: pointer; font-size: 1rem; padding: 0 5px; transition: 0.2s; }
         .chat-history-item:hover .delete-btn { display: block; }
         .delete-btn:hover { color: #cc0000; transform: scale(1.2); }
+        
         #historyList::-webkit-scrollbar { width: 5px; }
         #historyList::-webkit-scrollbar-thumb { background: #a0d0ff; border-radius: 5px; }
+
         .main-chat { flex: 1; display: flex; flex-direction: column; background: #ffffff; position: relative; }
         .chat-header { padding: 20px; border-bottom: 1px solid #eee; color: #2a6f97; font-weight: bold; font-size: 1.2rem; display: flex; align-items: center; justify-content: space-between; }
+        
         .menu-btn { display: none; background: transparent; border: none; font-size: 1.8rem; color: #2a6f97; cursor: pointer; padding: 0 10px; }
+        .switch-btn { background: #e0f0ff; color: #2a6f97; border: 1px solid #4aa3df; padding: 8px 12px; border-radius: 20px; cursor: pointer; font-weight: bold; font-size: 0.85rem; }
+        .switch-btn:hover { background: #4aa3df; color: white; }
+
         .user-info { font-size: 0.9rem; color: #666; }
         #chat { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 15px; }
         .mensaje { max-width: 85%; padding: 12px 16px; border-radius: 15px; line-height: 1.5; font-size: 0.95rem; white-space: pre-wrap; }
         .mensaje-usuario { align-self: flex-end; background: #4aa3df; color: white; border-bottom-right-radius: 2px; }
         .mensaje-miku { align-self: flex-start; background: #f0f7ff; color: #1b3a4b; border-bottom-left-radius: 2px; border: 1px solid #dff5ff; }
         .mensaje-miku b { color: #2a6f97; }
+        
         .tarjeta-imagen { background: #fff; border-radius: 8px; padding: 10px; margin: 15px 0; border: 1px solid #e0e0e0; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
         .titulo-imagen { font-weight: bold; color: #2a6f97; font-size: 0.9rem; margin-bottom: 8px; text-transform: capitalize; }
         .tarjeta-imagen img { display: block; width: 100%; height: auto; max-height: 450px; object-fit: contain; background-color: #f8f9fa; border-radius: 5px; margin: 0 auto; border: 1px solid #eee; }
         .atribucion { font-size: 0.75rem; color: #666; margin-top: 8px; font-style: italic; border-top: 1px solid #eee; padding-top: 5px; }
+        
         .input-area { padding: 15px; padding-bottom: 25px; border-top: 1px solid #eee; display: flex; gap: 10px; background: #fafafa; }
         input { flex: 1; padding: 15px; border-radius: 30px; border: 1px solid #ddd; outline: none; font-size: 1rem; transition: 0.3s; }
         input:focus { border-color: #4aa3df; box-shadow: 0 0 0 3px rgba(74, 163, 223, 0.2); }
         button.send-btn { padding: 15px 30px; background: #4aa3df; color: white; border: none; border-radius: 30px; cursor: pointer; font-weight: bold; transition: 0.3s; }
         button.send-btn:hover { background: #2a6f97; }
+
         .overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 998; }
+        
+        /* MODAL SELECTOR DE HERMANAS */
+        .modal-selector { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 20px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.3); z-index: 1000; width: 90%; max-width: 500px; text-align: center; }
+        .modal-selector h3 { color: #2a6f97; margin-bottom: 15px; }
+        .sisters-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+        .sister-card { cursor: pointer; padding: 10px; border-radius: 10px; border: 2px solid transparent; transition: 0.2s; background: #f0f7ff; }
+        .sister-card:hover { border-color: #4aa3df; transform: scale(1.05); }
+        .sister-card img { width: 100%; height: 100px; object-fit: cover; border-radius: 10px; }
+        .sister-card p { font-size: 0.8rem; font-weight: bold; color: #2a6f97; margin-top: 5px; }
+        
         @media (max-width: 768px) {
             .sidebar { position: fixed; top: 0; left: 0; height: 100dvh; z-index: 999; transform: translateX(-100%); }
             .sidebar.active { transform: translateX(0); }
             .overlay.active { display: block; }
             .menu-btn { display: block; }
             .chat-header { padding: 15px; font-size: 1.1rem; }
+            .sisters-grid { grid-template-columns: repeat(2, 1fr); }
         }
     </style>
 </head>
 <body>
     <div class="overlay" id="overlay" onclick="toggleMenu()"></div>
+    <div class="overlay" id="overlay-modal" onclick="cerrarModal()" style="z-index: 999;"></div>
+
+    <!-- MODAL DE SELECCIÓN -->
+    <div class="modal-selector" id="modal-selector">
+        <h3>Elige a tu hermana favorita</h3>
+        <div class="sisters-grid">
+            <div class="sister-card" onclick="cambiarHermana('Ichika', 'ichika.jpg')">
+                <img src="/static/ichika.jpg" alt="Ichika">
+                <p>Ichika (Matemáticas)</p>
+            </div>
+            <div class="sister-card" onclick="cambiarHermana('Nino', 'nino.jpg')">
+                <img src="/static/nino.jpg" alt="Nino">
+                <p>Nino (Inglés)</p>
+            </div>
+            <div class="sister-card" onclick="cambiarHermana('Miku', 'miku.webp')">
+                <img src="/static/miku.webp" alt="Miku">
+                <p>Miku (Historia)</p>
+            </div>
+            <div class="sister-card" onclick="cambiarHermana('Yotsuba', 'yotsuba.jpg')">
+                <img src="/static/yotsuba.jpg" alt="Yotsuba">
+                <p>Yotsuba (Salud)</p>
+            </div>
+            <div class="sister-card" onclick="cambiarHermana('Itsuki', 'itsuki.jpg')">
+                <img src="/static/itsuki.jpg" alt="Itsuki">
+                <p>Itsuki (Ciencias)</p>
+            </div>
+        </div>
+    </div>
+
     <div class="sidebar" id="sidebar">
-        <div class="miku-profile">
-            <img src="/static/fondo_miku.png.jpg" alt="Miku Nakano">
-            <h2>Miku Nakano AI 💙🎧</h2>
+        <div class="profile-header">
+            <img id="sidebar-img" src="/static/miku.webp" alt="Miku Nakano">
+            <h2 id="sidebar-name">Miku Nakano AI 💙🎧</h2>
         </div>
         <div class="history-section">
             <div class="history-title">Tus Chats</div>
@@ -156,12 +209,14 @@ HTML = """
             <div id="historyList"></div>
         </div>
     </div>
+
     <div class="main-chat">
         <div class="chat-header">
             <div style="display: flex; align-items: center;">
                 <button class="menu-btn" onclick="toggleMenu()">☰</button>
-                <span style="margin-left: 10px;">💬 Conversación con Miku</span>
+                <span style="margin-left: 10px;">💬 Conversación con <span id="header-name">Miku</span></span>
             </div>
+            <button class="switch-btn" onclick="abrirModal()">Cambiar Hermana</button>
             <span class="user-info">{{ user_name }}</span>
         </div>
         <div id="chat">
@@ -172,16 +227,36 @@ HTML = """
             <button class="send-btn" onclick="enviar()">Enviar</button>
         </div>
     </div>
+
     <script>
         let currentChatId = Date.now().toString();
         let chats = JSON.parse(localStorage.getItem('miku_chats')) || {};
+        
+        // Recuperar la última hermana seleccionada
+        let currentSister = localStorage.getItem('miku_hermana') || "Miku";
 
         function toggleMenu() {
             document.getElementById('sidebar').classList.toggle('active');
             document.getElementById('overlay').classList.toggle('active');
         }
+        function abrirModal() {
+            document.getElementById('modal-selector').style.display = 'block';
+            document.getElementById('overlay-modal').style.display = 'block';
+        }
+        function cerrarModal() {
+            document.getElementById('modal-selector').style.display = 'none';
+            document.getElementById('overlay-modal').style.display = 'none';
+        }
+        function cambiarHermana(nombre, imagen) {
+            currentSister = nombre;
+            localStorage.setItem('miku_hermana', nombre); // Guardar elección
+            document.getElementById('sidebar-name').innerText = nombre + " Nakano AI";
+            document.getElementById('header-name').innerText = nombre;
+            document.getElementById('sidebar-img').src = "/static/" + imagen;
+            document.getElementById('chat').innerHTML = `<div class="mensaje mensaje-miku"><b>${nombre}:</b> ¡Hola! Soy ${nombre}. ¿En qué te puedo ayudar hoy?</div>`;
+            cerrarModal();
+        }
         function guardarChats() { localStorage.setItem('miku_chats', JSON.stringify(chats)); renderizarHistorial(); }
-        
         function renderizarHistorial() {
             const list = document.getElementById('historyList'); list.innerHTML = '';
             const chatIds = Object.keys(chats).sort((a, b) => b - a);
@@ -198,18 +273,17 @@ HTML = """
         }
         function nuevoChat() {
             currentChatId = Date.now().toString();
-            document.getElementById('chat').innerHTML = '<div class="mensaje mensaje-miku"><b>Miku:</b> ¡Hola! 💙 Me alegra mucho verte por aquí. ¿En qué puedo ayudarte hoy?</div>';
+            document.getElementById('chat').innerHTML = `<div class="mensaje mensaje-miku"><b>${currentSister}:</b> ¡Hola! Soy ${currentSister}. ¿En qué te puedo ayudar hoy?</div>`;
             if (document.getElementById('sidebar').classList.contains('active')) toggleMenu();
         }
         function cargarChat(id) {
             currentChatId = id; const chat = chats[id]; const chatDiv = document.getElementById('chat'); chatDiv.innerHTML = '';
             chat.forEach(msg => {
                 if (msg.role === 'user') chatDiv.innerHTML += `<div class="mensaje mensaje-usuario"><b>Tú:</b> ${msg.texto}</div>`;
-                else chatDiv.innerHTML += `<div class="mensaje mensaje-miku"><b>Miku:</b> ${msg.html}</div>`;
+                else chatDiv.innerHTML += `<div class="mensaje mensaje-miku"><b>${msg.hermana || 'Miku'}:</b> ${msg.html}</div>`;
             });
             chatDiv.scrollTop = chatDiv.scrollHeight;
         }
-        
         async function enviar() {
             const input = document.getElementById('mensaje'); const chatDiv = document.getElementById('chat'); const mensaje = input.value;
             if (!mensaje) return;
@@ -218,10 +292,8 @@ HTML = """
             chatDiv.innerHTML += `<div class="mensaje mensaje-usuario"><b>Tú:</b> ${mensaje}</div>`;
             input.value = ''; chatDiv.scrollTop = chatDiv.scrollHeight;
             const idPensando = 'pensando-' + Date.now();
-            chatDiv.innerHTML += `<div class="mensaje mensaje-miku" id="${idPensando}"><b>Miku:</b> Investigando... 🔍</div>`;
+            chatDiv.innerHTML += `<div class="mensaje mensaje-miku" id="${idPensando}"><b>${currentSister}:</b> Investigando... 🔍</div>`;
             chatDiv.scrollTop = chatDiv.scrollHeight; guardarChats();
-
-            // Recopilar memoria de otros chats
             let memoriaGlobal = "";
             for (const id in chats) {
                 if (id !== currentChatId && chats[id].length > 0) {
@@ -229,19 +301,27 @@ HTML = """
                     if (ultimo.role === 'user') memoriaGlobal += `El usuario pregunto antes: "${ultimo.texto}". `;
                 }
             }
-
             const response = await fetch('/responder', { 
                 method: 'POST', 
                 headers: { 'Content-Type': 'application/json' }, 
-                body: JSON.stringify({ mensaje: mensaje, memoria: memoriaGlobal }) 
+                body: JSON.stringify({ mensaje: mensaje, memoria: memoriaGlobal, hermana: currentSister }) 
             });
             const data = await response.json();
-            document.getElementById(idPensando).innerHTML = `<b>Miku:</b> ${data.respuesta}`;
+            document.getElementById(idPensando).innerHTML = `<b>${currentSister}:</b> ${data.respuesta}`;
             chatDiv.scrollTop = chatDiv.scrollHeight;
-            chats[currentChatId].push({ role: 'miku', html: data.respuesta }); guardarChats();
+            chats[currentChatId].push({ role: 'miku', html: data.respuesta, hermana: currentSister }); guardarChats();
         }
+        
+        // Al cargar la página, poner la hermana guardada si no es Miku
+        if (currentSister !== "Miku") {
+            const fotos = { "Ichika": "ichika.jpg", "Nino": "nino.jpg", "Miku": "miku.webp", "Yotsuba": "yotsuba.jpg", "Itsuki": "itsuki.jpg" };
+            document.getElementById('sidebar-img').src = "/static/" + fotos[currentSister];
+            document.getElementById('sidebar-name').innerText = currentSister + " Nakano AI";
+            document.getElementById('header-name').innerText = currentSister;
+            document.getElementById('chat').innerHTML = `<div class="mensaje mensaje-miku"><b>${currentSister}:</b> ¡Hola! Soy ${currentSister}. ¿En qué te puedo ayudar hoy?</div>`;
+        }
+        
         renderizarHistorial();
-
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('/sw.js').catch(error => console.log('Fallo SW:', error));
@@ -288,6 +368,7 @@ def responder():
     data = request.get_json()
     mensaje = data.get('mensaje')
     memoria = data.get('memoria', '')
+    hermana = data.get('hermana', 'Miku')
     user_id = session['user_id']
     
     if es_riesgo_autolesion(mensaje):
@@ -299,56 +380,61 @@ def responder():
         return jsonify({"respuesta": respuesta_bloqueo})
     
     texto_lower = mensaje.lower()
-    
     if user_id not in historiales:
-        historiales[user_id] = [
-            {"role": "system", "content": "Eres Miku Nakano. Tu personalidad es dulce, cálida, amable y un poco tímida. Responde en español de forma clara y útil."}
-        ]
-    
+        historiales[user_id] = []
     historial_chat = historiales[user_id]
     
-    # INYECCIÓN DE MEMORIA ENTRE CHATS
-    if memoria:
-        historial_chat.append({"role": "system", "content": f"Tienes memoria a largo plazo. Recuerdas conversaciones pasadas con el usuario. Esta es la memoria: {memoria}. Si el usuario te pregunta '¿te acuerdas de lo que hablamos?', responde usando esta información."})
-
-    # Lógica simplificada para respuestas cortas
-    es_calculo_rapido = any(p in texto_lower for p in ["cuanto es", "cuánto es", "cuanto son", "cuánto son", "a cuantos", "conversion", "conversión", "tipo de cambio", "precio de", "dolar", "dólar", "soles", "euros"])
+    # PERSONALIDADES Y ESPECIALIDADES
+    personalidades = {
+        "Ichika": "Eres Ichika Nakano. Eres madura, relajada, bromista y astuta. Habla con calidez y confianza.",
+        "Nino": "Eres Nino Nakano. Eres directa, fuerte, orgullosa y protectora. Habla con seguridad, pero siempre con cariño y calidez hacia el usuario.",
+        "Yotsuba": "Eres Yotsuba Nakano. Eres alegre, energética, optimista y servicial. Habla con mucha emoción y calidez, como una amiga que siempre quiere ayudar.",
+        "Itsuki": "Eres Itsuki Nakano. Eres seria, responsable, educada y trabajadora. Habla con respeto, pero con una calidez amable y sincera."
+    }
+    especialidades = {
+        "Ichika": "matemáticas, física y lógica.",
+        "Nino": "inglés, traducción y gramática.",
+        "Miku": "historia, arte y literatura.",
+        "Yotsuba": "deportes, salud, nutrición y motivación.",
+        "Itsuki": "ciencias naturales (biología, química) y gastronomía."
+    }
     
+    if hermana == "Miku":
+        prompt_sistema = f"Tu especialidad es {especialidades['Miku']}. Responde en español."
+    else:
+        prompt_sistema = f"{personalidades.get(hermana)} Tu especialidad es {especialidades.get(hermana)}. Responde en español."
+        
+    historial_chat.append({"role": "system", "content": prompt_sistema})
+
+    if memoria:
+        historial_chat.append({"role": "system", "content": f"Memoria de conversaciones pasadas: {memoria}"})
+
+    es_calculo_rapido = any(p in texto_lower for p in ["cuanto es", "cuánto es", "cuanto son", "cuánto son", "a cuantos", "conversion", "conversión", "tipo de cambio", "precio de", "dolar", "dólar", "soles", "euros"])
     if es_calculo_rapido:
         num_fuentes = 2
         max_tokens_respuesta = 400
-        instruccion_longitud = "Escribe una respuesta SÚPER BREVE y DIRECTA, solo dando el dato exacto sin explicaciones extra."
-    elif "completa" in texto_lower or "detallada" in texto_lower or "grande" in texto_lower or "profunda" in texto_lower or "extensa" in texto_lower:
+        instruccion_longitud = "Escribe una respuesta SÚPER BREVE y DIRECTA."
+    elif "completa" in texto_lower or "detallada" in texto_lower or "grande" in texto_lower or "profunda" in texto_lower:
         num_fuentes = 10
         max_tokens_respuesta = 4000
-        instruccion_longitud = "Escribe una investigación PROFUNDA y EXTENSA. Incluye: Introducción, Antecedentes, Desarrollo detallado, Análisis, Conclusiones y Bibliografía."
+        instruccion_longitud = "Escribe una investigación PROFUNDA y EXTENSA."
     else:
         num_fuentes = 5
         max_tokens_respuesta = 1500
-        instruccion_longitud = "Escribe una investigación MEDIANA. Incluye una introducción, 2 o 3 apartados con datos importantes y una conclusión."
+        instruccion_longitud = "Escribe una investigación MEDIANA."
 
     query = ""
     if "busca" in texto_lower or "investiga" in texto_lower or "resumen" in texto_lower:
         query = texto_lower.replace("miku", "").replace("busca", "").replace("investiga", "").replace("resumen", "").replace("hazme", "").replace("de", "").replace("sobre", "").replace("la", "").replace("el", "").replace("una", "").replace("un", "").replace("que es", "").replace("quien es", "").strip()
-        
         if query:
             try:
                 resultados = DDGS().text(query, max_results=num_fuentes)
                 info_web = "\n".join([f"- {r['title']}: {r['body']}" for r in resultados])
-                historial_chat.append({"role": "system", "content": f"Información de internet ({num_fuentes} fuentes):\n{info_web}"})
+                historial_chat.append({"role": "system", "content": f"Información de internet:\n{info_web}"})
             except: pass
 
     historial_chat.append({"role": "system", "content": instruccion_longitud})
-
-    instruccion_imagenes = (
-        "IMPORTANTE: Para hacer tu respuesta más visual, añade etiquetas secretas con imágenes. "
-        "El formato exacto es: [IMG: palabras clave en inglés]. "
-        "CRÍTICO: Usa palabras clave MUY ESPECÍFICAS y en inglés (mínimo 3 palabras). "
-        "No uses palabras genéricas como 'war', 'history' o 'people'. "
-        "Ejemplo correcto: [IMG: World War II Normandy landings tanks]. "
-        "NUNCA uses la palabra 'book', 'document' o 'scan' en la búsqueda. "
-        "Usa máximo 2 imágenes por respuesta, colocadas justo después del párrafo al que se refieren."
-    )
+    instruccion_imagenes = "IMPORTANTE: Para hacer tu respuesta más visual, añade [IMG: palabras clave en inglés]. Usa máximo 2 imágenes."
     historial_chat.append({"role": "system", "content": instruccion_imagenes})
     historial_chat.append({"role": "user", "content": mensaje})
     
@@ -373,17 +459,10 @@ def responder():
                 imagenes = buscar_imagen_wikimedia(palabras_clave, limite=5)
                 if imagenes:
                     img = imagenes[0] 
-                    tarjeta = f'''
-                    <div class="tarjeta-imagen">
-                        <div class="titulo-imagen">📷 {img["nombre"]}</div>
-                        <img src="{img["url"]}" alt="{palabras_clave}">
-                        <div class="atribucion">Fuente: Wikimedia Commons | Autor: {img["autor"]} | Licencia: {img["licencia"]}</div>
-                    </div>
-                    '''
+                    tarjeta = f'<div class="tarjeta-imagen"><div class="titulo-imagen">📷 {img["nombre"]}</div><img src="{img["url"]}" alt="{palabras_clave}"><div class="atribucion">Fuente: Wikimedia Commons | Autor: {img["autor"]} | Licencia: {img["licencia"]}</div></div>'
                     respuesta_final += tarjeta + "\n"
         
         historial_chat.append({"role": "assistant", "content": respuesta_final})
-        
         return jsonify({"respuesta": respuesta_final})
     except Exception as e:
         return jsonify({"respuesta": f"Error: {e}"})
