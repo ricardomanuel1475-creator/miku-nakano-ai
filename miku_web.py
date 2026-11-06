@@ -31,7 +31,7 @@ oauth.register(
 )
 
 # ==========================================
-# CONFIGURACIÓN DE LA IA (GROQ) - TU CLAVE NUEVA
+# CONFIGURACIÓN DE LA IA (GROQ)
 # ==========================================
 GROQ_API_KEY = "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"
 cliente = Groq(api_key=GROQ_API_KEY)
@@ -83,9 +83,6 @@ def buscar_imagen_wikimedia(palabras_clave, limite=5):
 
 historiales = {}
 
-# ==========================================
-# LA INTERFAZ WEB (CON SELECTOR DE HERMANAS Y MEMORIA)
-# ==========================================
 HTML = """
 <!DOCTYPE html>
 <html>
@@ -148,7 +145,6 @@ HTML = """
 
         .overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 998; }
         
-        /* MODAL SELECTOR DE HERMANAS */
         .modal-selector { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 20px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.3); z-index: 1000; width: 90%; max-width: 500px; text-align: center; }
         .modal-selector h3 { color: #2a6f97; margin-bottom: 15px; }
         .sisters-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
@@ -171,28 +167,27 @@ HTML = """
     <div class="overlay" id="overlay" onclick="toggleMenu()"></div>
     <div class="overlay" id="overlay-modal" onclick="cerrarModal()" style="z-index: 999;"></div>
 
-    <!-- MODAL DE SELECCIÓN -->
     <div class="modal-selector" id="modal-selector">
         <h3>Elige a tu hermana favorita</h3>
         <div class="sisters-grid">
-            <div class="sister-card" onclick="cambiarHermana('Ichika', 'ichika.jpg')">
-                <img src="/static/ichika.jpg" alt="Ichika">
+            <div class="sister-card" onclick="cambiarHermana('Ichika', 'ichika.png')">
+                <img src="/static/ichika.png" alt="Ichika">
                 <p>Ichika (Matemáticas)</p>
             </div>
-            <div class="sister-card" onclick="cambiarHermana('Nino', 'nino.jpg')">
-                <img src="/static/nino.jpg" alt="Nino">
+            <div class="sister-card" onclick="cambiarHermana('Nino', 'nino.png')">
+                <img src="/static/nino.png" alt="Nino">
                 <p>Nino (Inglés)</p>
             </div>
-            <div class="sister-card" onclick="cambiarHermana('Miku', 'miku.webp')">
-                <img src="/static/miku.webp" alt="Miku">
+            <div class="sister-card" onclick="cambiarHermana('Miku', 'miku.png')">
+                <img src="/static/miku.png" alt="Miku">
                 <p>Miku (Historia)</p>
             </div>
-            <div class="sister-card" onclick="cambiarHermana('Yotsuba', 'yotsuba.jpg')">
-                <img src="/static/yotsuba.jpg" alt="Yotsuba">
+            <div class="sister-card" onclick="cambiarHermana('Yotsuba', 'yotsuba.png')">
+                <img src="/static/yotsuba.png" alt="Yotsuba">
                 <p>Yotsuba (Salud)</p>
             </div>
-            <div class="sister-card" onclick="cambiarHermana('Itsuki', 'itsuki.jpg')">
-                <img src="/static/itsuki.jpg" alt="Itsuki">
+            <div class="sister-card" onclick="cambiarHermana('Itsuki', 'itsuki.png')">
+                <img src="/static/itsuki.png" alt="Itsuki">
                 <p>Itsuki (Ciencias)</p>
             </div>
         </div>
@@ -200,7 +195,7 @@ HTML = """
 
     <div class="sidebar" id="sidebar">
         <div class="profile-header">
-            <img id="sidebar-img" src="/static/miku.webp" alt="Miku Nakano">
+            <img id="sidebar-img" src="/static/miku.png" alt="Miku Nakano">
             <h2 id="sidebar-name">Miku Nakano AI 💙🎧</h2>
         </div>
         <div class="history-section">
@@ -231,8 +226,6 @@ HTML = """
     <script>
         let currentChatId = Date.now().toString();
         let chats = JSON.parse(localStorage.getItem('miku_chats')) || {};
-        
-        // Recuperar la última hermana seleccionada
         let currentSister = localStorage.getItem('miku_hermana') || "Miku";
 
         function toggleMenu() {
@@ -249,7 +242,7 @@ HTML = """
         }
         function cambiarHermana(nombre, imagen) {
             currentSister = nombre;
-            localStorage.setItem('miku_hermana', nombre); // Guardar elección
+            localStorage.setItem('miku_hermana', nombre);
             document.getElementById('sidebar-name').innerText = nombre + " Nakano AI";
             document.getElementById('header-name').innerText = nombre;
             document.getElementById('sidebar-img').src = "/static/" + imagen;
@@ -312,9 +305,8 @@ HTML = """
             chats[currentChatId].push({ role: 'miku', html: data.respuesta, hermana: currentSister }); guardarChats();
         }
         
-        // Al cargar la página, poner la hermana guardada si no es Miku
         if (currentSister !== "Miku") {
-            const fotos = { "Ichika": "ichika.jpg", "Nino": "nino.jpg", "Miku": "miku.webp", "Yotsuba": "yotsuba.jpg", "Itsuki": "itsuki.jpg" };
+            const fotos = { "Ichika": "ichika.png", "Nino": "nino.png", "Miku": "miku.png", "Yotsuba": "yotsuba.png", "Itsuki": "itsuki.png" };
             document.getElementById('sidebar-img').src = "/static/" + fotos[currentSister];
             document.getElementById('sidebar-name').innerText = currentSister + " Nakano AI";
             document.getElementById('header-name').innerText = currentSister;
@@ -384,7 +376,6 @@ def responder():
         historiales[user_id] = []
     historial_chat = historiales[user_id]
     
-    # PERSONALIDADES Y ESPECIALIDADES
     personalidades = {
         "Ichika": "Eres Ichika Nakano. Eres madura, relajada, bromista y astuta. Habla con calidez y confianza.",
         "Nino": "Eres Nino Nakano. Eres directa, fuerte, orgullosa y protectora. Habla con seguridad, pero siempre con cariño y calidez hacia el usuario.",
