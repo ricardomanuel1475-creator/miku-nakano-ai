@@ -214,7 +214,10 @@ HTML = """
                 <button class="menu-btn" onclick="toggleMenu()">☰</button>
                 <span style="margin-left: 10px;">💬 Conversación con <span id="header-name">Miku</span></span>
             </div>
+            
+            <!-- BOTÓN PARA CAMBIAR DE HERMANA -->
             <button class="switch-btn" onclick="abrirModal()">Cambiar Hermana</button>
+            
             <span class="user-info">{{ user_name }}</span>
         </div>
         <div id="chat">
