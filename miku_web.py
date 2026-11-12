@@ -18,7 +18,7 @@ app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.secret_key = os.environ.get('SECRET_KEY', 'MikuNakanoEsLaMejorAsistente2026')
 
 # ==========================================
-# EVITAR CACHÉ (Para que se actualice solo)
+# EVITAR CACHÉ
 # ==========================================
 @app.after_request
 def add_header(response):
@@ -94,7 +94,7 @@ def buscar_imagen_wikimedia(palabras_clave, limite=5):
 historiales = {}
 
 # ==========================================
-# LA INTERFAZ WEB
+# LA INTERFAZ WEB (CON PANTALLA DE CARGA)
 # ==========================================
 HTML = """
 <!DOCTYPE html>
@@ -107,57 +107,98 @@ HTML = """
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: 'Segoe UI', Arial, sans-serif; background-color: #f0f7ff; display: flex; height: 100dvh; overflow: hidden; }
+
+        /* PANTALLA DE CARGA ANIMADA */
+        #loading-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100dvh;
+            background-color: #0f0f1a;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            transition: opacity 0.8s ease;
+        }
+        #loading-screen.hidden { opacity: 0; pointer-events: none; }
         
+        .loading-image {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+
+        /* BARRA ANIMADA */
+        .barra-carga-container {
+            position: absolute;
+            bottom: 15%;
+            width: 60%;
+            max-width: 400px;
+            height: 15px;
+            background-color: rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            border: 2px solid #4aa3df;
+            overflow: hidden;
+            box-shadow: 0 0 15px #4aa3df;
+        }
+        .barra-carga {
+            width: 50%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, #00d2ff, #fff, #00d2ff, transparent);
+            background-size: 200% 100%;
+            border-radius: 20px;
+            animation: moverBarra 1.5s infinite linear;
+        }
+        @keyframes moverBarra {
+            0% { background-position: 100% 0; }
+            100% { background-position: -100% 0; }
+        }
+
+        /* RESTO DEL CSS (APP NORMAL) */
         .sidebar { width: 320px; background: linear-gradient(180deg, #dff5ff 0%, #b3e0ff 100%); display: flex; flex-direction: column; padding: 15px; border-right: 2px solid #b3d9ff; flex-shrink: 0; overflow: hidden; transition: transform 0.3s ease; }
-        
         .profile-header { display: flex; flex-direction: column; align-items: center; padding-bottom: 15px; border-bottom: 1px solid #a0d0ff; margin-bottom: 15px; flex-shrink: 0; }
         .profile-header img { width: 180px; height: 180px; object-fit: cover; border-radius: 25px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); border: 4px solid #fff; }
         .profile-header h2 { margin-top: 12px; color: #2a6f97; font-size: 1.4rem; text-align: center; }
-        
         .history-section { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
         .history-title { font-size: 0.9rem; font-weight: bold; color: #2a6f97; margin-bottom: 10px; }
         .new-chat-btn { background: #4aa3df; color: white; border: none; padding: 10px 12px; border-radius: 8px; cursor: pointer; font-size: 0.85rem; width: 100%; margin-bottom: 10px; font-weight: bold; transition: 0.3s; }
         .new-chat-btn:hover { background: #2a6f97; }
-        
         #historyList { overflow-y: auto; flex: 1; padding-right: 5px; }
         .chat-history-item { display: flex; justify-content: space-between; align-items: center; padding: 10px; border-radius: 8px; margin-bottom: 5px; cursor: pointer; font-size: 0.85rem; color: #333; background: #fff; border: 1px solid #dff5ff; transition: 0.2s; }
         .chat-history-item:hover { background: #e0f0ff; color: #2a6f97; border-color: #4aa3df; }
         .chat-history-item span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; }
-        
         .delete-btn { display: none; background: transparent; border: none; color: #ff4d4d; cursor: pointer; font-size: 1rem; padding: 0 5px; transition: 0.2s; }
         .chat-history-item:hover .delete-btn { display: block; }
         .delete-btn:hover { color: #cc0000; transform: scale(1.2); }
-        
         #historyList::-webkit-scrollbar { width: 5px; }
         #historyList::-webkit-scrollbar-thumb { background: #a0d0ff; border-radius: 5px; }
-
         .main-chat { flex: 1; display: flex; flex-direction: column; background: #ffffff; position: relative; }
         .chat-header { padding: 20px; border-bottom: 1px solid #eee; color: #2a6f97; font-weight: bold; font-size: 1.2rem; display: flex; align-items: center; justify-content: space-between; }
-        
         .menu-btn { display: none; background: transparent; border: none; font-size: 1.8rem; color: #2a6f97; cursor: pointer; padding: 0 10px; }
         .switch-btn { background: #e0f0ff; color: #2a6f97; border: 1px solid #4aa3df; padding: 8px 12px; border-radius: 20px; cursor: pointer; font-weight: bold; font-size: 0.85rem; }
         .switch-btn:hover { background: #4aa3df; color: white; }
-
         .user-info { font-size: 0.9rem; color: #666; }
         #chat { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 15px; }
         .mensaje { max-width: 85%; padding: 12px 16px; border-radius: 15px; line-height: 1.5; font-size: 0.95rem; white-space: pre-wrap; }
         .mensaje-usuario { align-self: flex-end; background: #4aa3df; color: white; border-bottom-right-radius: 2px; }
         .mensaje-miku { align-self: flex-start; background: #f0f7ff; color: #1b3a4b; border-bottom-left-radius: 2px; border: 1px solid #dff5ff; }
         .mensaje-miku b { color: #2a6f97; }
-        
         .tarjeta-imagen { background: #fff; border-radius: 8px; padding: 10px; margin: 15px 0; border: 1px solid #e0e0e0; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
         .titulo-imagen { font-weight: bold; color: #2a6f97; font-size: 0.9rem; margin-bottom: 8px; text-transform: capitalize; }
         .tarjeta-imagen img { display: block; width: 100%; height: auto; max-height: 450px; object-fit: contain; background-color: #f8f9fa; border-radius: 5px; margin: 0 auto; border: 1px solid #eee; }
         .atribucion { font-size: 0.75rem; color: #666; margin-top: 8px; font-style: italic; border-top: 1px solid #eee; padding-top: 5px; }
-        
         .input-area { padding: 15px; padding-bottom: 25px; border-top: 1px solid #eee; display: flex; gap: 10px; background: #fafafa; }
         input { flex: 1; padding: 15px; border-radius: 30px; border: 1px solid #ddd; outline: none; font-size: 1rem; transition: 0.3s; }
         input:focus { border-color: #4aa3df; box-shadow: 0 0 0 3px rgba(74, 163, 223, 0.2); }
         button.send-btn { padding: 15px 30px; background: #4aa3df; color: white; border: none; border-radius: 30px; cursor: pointer; font-weight: bold; transition: 0.3s; }
         button.send-btn:hover { background: #2a6f97; }
-
         .overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 998; }
-        
         .modal-selector { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 20px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.3); z-index: 1000; width: 90%; max-width: 500px; text-align: center; }
         .modal-selector h3 { color: #2a6f97; margin-bottom: 15px; }
         .sisters-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
@@ -165,18 +206,26 @@ HTML = """
         .sister-card:hover { border-color: #4aa3df; transform: scale(1.05); }
         .sister-card img { width: 100%; height: 100px; object-fit: cover; border-radius: 10px; }
         .sister-card p { font-size: 0.8rem; font-weight: bold; color: #2a6f97; margin-top: 5px; }
-        
         @media (max-width: 768px) {
             .sidebar { position: fixed; top: 0; left: 0; height: 100dvh; z-index: 999; transform: translateX(-100%); }
             .sidebar.active { transform: translateX(0); }
             .overlay.active { display: block; }
             .menu-btn { display: block; }
-            .chat-header { padding: 15px; font-size: 1.1rem; }
+            .chat-header { padding: 15px; font-size: 1.1rem; flex-wrap: wrap; gap: 5px; }
             .sisters-grid { grid-template-columns: repeat(2, 1fr); }
+            .barra-carga-container { width: 80%; bottom: 20%; }
         }
     </style>
 </head>
 <body>
+    <!-- PANTALLA DE CARGA (IMAGEN + ANIMACIÓN) -->
+    <div id="loading-screen">
+        <img src="/static/carga.png" alt="Cargando..." class="loading-image">
+        <div class="barra-carga-container">
+            <div class="barra-carga"></div>
+        </div>
+    </div>
+
     <div class="overlay" id="overlay" onclick="toggleMenu()"></div>
     <div class="overlay" id="overlay-modal" onclick="cerrarModal()" style="z-index: 999;"></div>
 
@@ -241,8 +290,15 @@ HTML = """
     <script>
         let currentChatId = Date.now().toString();
         let currentSister = localStorage.getItem('miku_hermana') || "Miku";
-        
         let chats = JSON.parse(localStorage.getItem('miku_chats_' + currentSister)) || {};
+
+        // Ocultar pantalla de carga
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                const loader = document.getElementById('loading-screen');
+                if(loader) loader.classList.add('hidden');
+            }, 1500); // 1.5 segundos de animación
+        });
 
         const saludos = {
             "Ichika": "¡Hola! 💙 Soy Ichika. Me alegra mucho verte. ¿En qué te gustaría que te ayudara hoy?",
