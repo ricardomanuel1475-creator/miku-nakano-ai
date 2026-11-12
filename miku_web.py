@@ -94,7 +94,7 @@ def buscar_imagen_wikimedia(palabras_clave, limite=5):
 historiales = {}
 
 # ==========================================
-# LA INTERFAZ WEB (CON PANTALLA DE CARGA)
+# LA INTERFAZ WEB (CON PANTALLA DE CARGA ADAPTABLE)
 # ==========================================
 HTML = """
 <!DOCTYPE html>
@@ -125,10 +125,11 @@ HTML = """
         }
         #loading-screen.hidden { opacity: 0; pointer-events: none; }
         
+        /* Imagen por defecto (Móvil Vertical) */
         .loading-image {
             width: 100%;
             height: 100%;
-            object-fit: contain;
+            object-fit: cover;
             position: absolute;
             top: 0;
             left: 0;
@@ -146,6 +147,7 @@ HTML = """
             border: 2px solid #4aa3df;
             overflow: hidden;
             box-shadow: 0 0 15px #4aa3df;
+            z-index: 2;
         }
         .barra-carga {
             width: 50%;
@@ -158,6 +160,16 @@ HTML = """
         @keyframes moverBarra {
             0% { background-position: 100% 0; }
             100% { background-position: -100% 0; }
+        }
+
+        /* MAGIA: Si la pantalla está en Horizontal (PC, Tablet, Celular acostado) */
+        @media (orientation: landscape) {
+            .loading-image {
+                content: url('/static/carga_pc.png');
+            }
+            .barra-carga-container {
+                bottom: 10%; /* Ajuste para que la barra no tape el texto en horizontal */
+            }
         }
 
         /* RESTO DEL CSS (APP NORMAL) */
@@ -218,7 +230,7 @@ HTML = """
     </style>
 </head>
 <body>
-    <!-- PANTALLA DE CARGA (IMAGEN + ANIMACIÓN) -->
+    <!-- PANTALLA DE CARGA (MAGIA: CAMBIA SEGÚN LA ORIENTACIÓN) -->
     <div id="loading-screen">
         <img src="/static/carga.png" alt="Cargando..." class="loading-image">
         <div class="barra-carga-container">
