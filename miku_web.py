@@ -17,9 +17,6 @@ app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.secret_key = os.environ.get('SECRET_KEY', 'MikuNakanoEsLaMejorAsistente2026')
 
-# ==========================================
-# EVITAR CACHÉ
-# ==========================================
 @app.after_request
 def add_header(response):
     response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, post-check=0, pre-check=0, max-age=0'
@@ -57,9 +54,6 @@ def es_contenido_inapropiado(texto):
     palabras_bloqueadas = ["porno", "pornografia", "pornografía", "xxx", "contenido adulto", "onlyfans", "sexo explícito", "desnudos", "hentai", "erotico", "erótico", "como matar a", "cómo matar a", "drogas ilegales", "como fabricar explosivos", "cocaína", "marihuana ilegal", "violencia extrema", "gore", "snuff", "como hackear", "cómo hackear", "robar tarjetas"]
     return any(palabra in texto.lower() for palabra in palabras_bloqueadas)
 
-# ==========================================
-# FUNCIONES DE APOYO
-# ==========================================
 def limpiar_texto(texto):
     texto = re.sub(r'[*#|]', '', texto)
     texto = re.sub(r'\d+\.\s*', '- ', texto)
@@ -93,9 +87,6 @@ def buscar_imagen_wikimedia(palabras_clave, limite=5):
 
 historiales = {}
 
-# ==========================================
-# LA INTERFAZ WEB (CON PANTALLA DE CARGA ADAPTABLE)
-# ==========================================
 HTML = """
 <!DOCTYPE html>
 <html>
@@ -108,7 +99,7 @@ HTML = """
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: 'Segoe UI', Arial, sans-serif; background-color: #f0f7ff; display: flex; height: 100dvh; overflow: hidden; }
 
-        /* PANTALLA DE CARGA ANIMADA */
+        /* PANTALLA DE CARGA */
         #loading-screen {
             position: fixed;
             top: 0;
@@ -125,7 +116,6 @@ HTML = """
         }
         #loading-screen.hidden { opacity: 0; pointer-events: none; }
         
-        /* Imagen por defecto (Móvil Vertical) */
         .loading-image {
             width: 100%;
             height: 100%;
@@ -135,7 +125,7 @@ HTML = """
             left: 0;
         }
 
-        /* BARRA ANIMADA */
+        /* BARRA ANIMADA INTELIGENTE */
         .barra-carga-container {
             position: absolute;
             bottom: 15%;
@@ -150,26 +140,18 @@ HTML = """
             z-index: 2;
         }
         .barra-carga {
-            width: 50%;
+            width: 0%;
             height: 100%;
-            background: linear-gradient(90deg, transparent, #00d2ff, #fff, #00d2ff, transparent);
+            background: linear-gradient(90deg, #00d2ff, #fff, #00d2ff);
             background-size: 200% 100%;
             border-radius: 20px;
-            animation: moverBarra 1.5s infinite linear;
-        }
-        @keyframes moverBarra {
-            0% { background-position: 100% 0; }
-            100% { background-position: -100% 0; }
+            transition: width 0.5s ease-in-out; /* Transición suave */
         }
 
-        /* MAGIA: Si la pantalla está en Horizontal (PC, Tablet, Celular acostado) */
+        /* MAGIA: Si la pantalla está en Horizontal (PC, Tablet) */
         @media (orientation: landscape) {
-            .loading-image {
-                content: url('/static/carga_pc.png');
-            }
-            .barra-carga-container {
-                bottom: 10%; /* Ajuste para que la barra no tape el texto en horizontal */
-            }
+            .loading-image { content: url('/static/carga_pc.png'); }
+            .barra-carga-container { bottom: 10%; }
         }
 
         /* RESTO DEL CSS (APP NORMAL) */
@@ -230,11 +212,11 @@ HTML = """
     </style>
 </head>
 <body>
-    <!-- PANTALLA DE CARGA (MAGIA: CAMBIA SEGÚN LA ORIENTACIÓN) -->
+    <!-- PANTALLA DE CARGA -->
     <div id="loading-screen">
         <img src="/static/carga.png" alt="Cargando..." class="loading-image">
         <div class="barra-carga-container">
-            <div class="barra-carga"></div>
+            <div class="barra-carga" id="mi-barra"></div>
         </div>
     </div>
 
@@ -304,12 +286,34 @@ HTML = """
         let currentSister = localStorage.getItem('miku_hermana') || "Miku";
         let chats = JSON.parse(localStorage.getItem('miku_chats_' + currentSister)) || {};
 
-        // Ocultar pantalla de carga
+        // LÓGICA DE LA BARRA DE CARGA INTELIGENTE
+        const barra = document.getElementById('mi-barra');
+        let progreso = 0;
+        let cargando = true;
+
+        // 1. La barra empieza a subir lentamente hasta el 90%
+        const intervalo = setInterval(() => {
+            if (cargando && progreso < 90) {
+                progreso += 1; // Sube 1% cada 100ms (aprox 9 segundos para llegar al 90%)
+                barra.style.width = progreso + '%';
+            }
+        }, 100);
+
+        // 2. Cuando la página termina de cargar (El servidor despertó)
         window.addEventListener('load', () => {
+            cargando = false;
+            clearInterval(intervalo);
+            
+            // Llenamos la barra del 90% al 100% de golpe
+            barra.style.width = '100%';
+
+            // Esperamos 1 segundo para que el usuario vea la barra llena
             setTimeout(() => {
                 const loader = document.getElementById('loading-screen');
-                if(loader) loader.classList.add('hidden');
-            }, 1500); // 1.5 segundos de animación
+                if(loader) {
+                    loader.classList.add('hidden');
+                }
+            }, 1000);
         });
 
         const saludos = {
