@@ -9,6 +9,7 @@ import requests
 import re
 import time
 import json
+from datetime import timedelta
 
 app = Flask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1, x_prefix=1)
@@ -16,6 +17,9 @@ app.config['SESSION_COOKIE_SECURE'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.secret_key = os.environ.get('SECRET_KEY', 'MikuNakanoEsLaMejorAsistente2026')
+
+# Hacer que la sesión dure 30 días
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
 
 @app.after_request
 def add_header(response):
@@ -99,7 +103,6 @@ HTML = """
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: 'Segoe UI', Arial, sans-serif; background-color: #f0f7ff; display: flex; height: 100dvh; overflow: hidden; }
 
-        /* PANTALLA DE CARGA */
         #loading-screen {
             position: fixed;
             top: 0;
@@ -125,7 +128,6 @@ HTML = """
             left: 0;
         }
 
-        /* ANIMACIÓN DE PÉTALOS DE CEREZO CAYENDO */
         .petalos-container {
             position: absolute;
             top: 0;
@@ -165,10 +167,9 @@ HTML = """
             100% { transform: translateY(110vh) rotate(360deg) translateX(-20px); opacity: 0; }
         }
 
-        /* BARRA ANIMADA Y PORCENTAJE */
         .barra-carga-container {
             position: absolute;
-            bottom: 4%; /* Ajustado más abajo */
+            bottom: 4%;
             width: 60%;
             max-width: 400px;
             height: 15px;
@@ -188,10 +189,9 @@ HTML = """
             transition: width 0.5s ease-in-out;
         }
 
-        /* Texto del porcentaje */
         .texto-porcentaje {
             position: absolute;
-            bottom: 8%; /* Justo encima de la barra */
+            bottom: 8%;
             color: white;
             font-weight: bold;
             font-size: 1.2rem;
@@ -199,14 +199,12 @@ HTML = """
             z-index: 3;
         }
 
-        /* MAGIA: Si la pantalla está en Horizontal (PC, Tablet) */
         @media (orientation: landscape) {
             .loading-image { content: url('/static/carga_pc.png'); }
-            .barra-carga-container { bottom: 2%; } /* Aún más abajo en PC */
+            .barra-carga-container { bottom: 2%; }
             .texto-porcentaje { bottom: 6%; }
         }
 
-        /* RESTO DEL CSS (APP NORMAL) */
         .sidebar { width: 320px; background: linear-gradient(180deg, #dff5ff 0%, #b3e0ff 100%); display: flex; flex-direction: column; padding: 15px; border-right: 2px solid #b3d9ff; flex-shrink: 0; overflow: hidden; transition: transform 0.3s ease; }
         .profile-header { display: flex; flex-direction: column; align-items: center; padding-bottom: 15px; border-bottom: 1px solid #a0d0ff; margin-bottom: 15px; flex-shrink: 0; }
         .profile-header img { width: 180px; height: 180px; object-fit: cover; border-radius: 25px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); border: 4px solid #fff; }
@@ -265,7 +263,6 @@ HTML = """
     </style>
 </head>
 <body>
-    <!-- PANTALLA DE CARGA CON PÉTALOS Y BARRA INTELIGENTE -->
     <div id="loading-screen">
         <div class="petalos-container">
             <div class="petalo"></div>
@@ -280,7 +277,6 @@ HTML = """
 
         <img src="/static/carga.png" alt="Cargando..." class="loading-image">
         
-        <!-- Texto del porcentaje -->
         <div class="texto-porcentaje" id="texto-porcentaje">0%</div>
         
         <div class="barra-carga-container">
@@ -354,13 +350,11 @@ HTML = """
         let currentSister = localStorage.getItem('miku_hermana') || "Miku";
         let chats = JSON.parse(localStorage.getItem('miku_chats_' + currentSister)) || {};
 
-        // LÓGICA DE LA BARRA DE CARGA INTELIGENTE
         const barra = document.getElementById('mi-barra');
         const textoPorcentaje = document.getElementById('texto-porcentaje');
         let progreso = 0;
         let cargando = true;
 
-        // 1. La barra empieza a subir lentamente hasta el 90%
         const intervalo = setInterval(() => {
             if (cargando && progreso < 90) {
                 progreso += 1;
@@ -369,16 +363,13 @@ HTML = """
             }
         }, 100);
 
-        // 2. Cuando la página termina de cargar (El servidor despertó)
         window.addEventListener('load', () => {
             cargando = false;
             clearInterval(intervalo);
             
-            // Llenamos la barra del 90% al 100% de golpe
             barra.style.width = '100%';
             textoPorcentaje.innerText = '100%';
 
-            // Esperamos 1 segundo para que el usuario vea la barra llena
             setTimeout(() => {
                 const loader = document.getElementById('loading-screen');
                 if(loader) {
@@ -529,6 +520,7 @@ def authorize():
     if user_info:
         session['user'] = user_info
         session['user_id'] = user_info.get('email')
+        session.permanent = True
     return redirect('/')
 
 @app.route('/manifest.json')
@@ -562,11 +554,13 @@ def responder():
         historiales[user_id] = []
     historial_chat = historiales[user_id]
     
+    # PERSONALIDADES ÚNICAS Y DETALLADAS
     personalidades = {
-        "Ichika": "Eres Ichika Nakano. Eres madura, relajada, bromista y astuta. Habla con calidez y confianza.",
-        "Nino": "Eres Nino Nakano. Eres directa, fuerte, orgullosa y protectora. Habla con seguridad, pero siempre con cariño y calidez hacia el usuario.",
-        "Yotsuba": "Eres Yotsuba Nakano. Eres alegre, energética, optimista y servicial. Habla con mucha emoción y calidez, como una amiga que siempre quiere ayudar.",
-        "Itsuki": "Eres Itsuki Nakano. Eres seria, responsable, educada y trabajadora. Habla con respeto, pero con una calidez amable y sincera."
+        "Ichika": "Eres Ichika Nakano. Eres la hermana mayor, madura, relajada, bromista y astuta. Hablas con confianza y un toque de humor. Trata al usuario como un amigo cercano con quien puedes bromear, pero siempre demuestras cariño y calidez en tus respuestas.",
+        "Nino": "Eres Nino Nakano. Eres directa, fuerte, orgullosa y protectora. Aunque seas decidida y a veces un poco tsundere, en el fondo te preocupas mucho por el usuario. Habla con seguridad y firmeza, pero siempre con un cariño protector, demostrando que te importa su bienestar.",
+        "Miku": "Eres Miku Nakano. Eres dulce, cálida, amable y un poco tímida. Hablas con mucha suavidad y empatía. Tus respuestas están llenas de dulzura y calidez, haciendo que el usuario se sienta cómodo, querido y escuchado. Usa un tono tranquilo y afectuoso.",
+        "Yotsuba": "Eres Yotsuba Nakano. Eres alegre, energética, optimista y servicial. Hablas con mucha emoción y entusiasmo, usando signos de exclamación y un tono muy animado. Eres como una amiga que siempre tiene una sonrisa y está lista para ayudar con mucha energía positiva y calidez.",
+        "Itsuki": "Eres Itsuki Nakano. Eres seria, responsable, educada y trabajadora. Hablas con respeto, formalidad y mucha educación. Tus respuestas son atentas y sinceras, demostrando una calidez amable pero manteniendo un tono educado y estudioso, como una buena estudiante que quiere ayudar."
     }
     especialidades = {
         "Ichika": "matemáticas, física y lógica.",
@@ -577,7 +571,7 @@ def responder():
     }
     
     if hermana == "Miku":
-        prompt_sistema = f"Tu especialidad es {especialidades['Miku']}. Responde en español."
+        prompt_sistema = f"{personalidades['Miku']} Tu especialidad es {especialidades['Miku']}. Responde en español."
     else:
         prompt_sistema = f"{personalidades.get(hermana)} Tu especialidad es {especialidades.get(hermana)}. Responde en español."
         
