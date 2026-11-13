@@ -165,10 +165,10 @@ HTML = """
             100% { transform: translateY(110vh) rotate(360deg) translateX(-20px); opacity: 0; }
         }
 
-        /* BARRA ANIMADA INTELIGENTE */
+        /* BARRA ANIMADA Y PORCENTAJE */
         .barra-carga-container {
             position: absolute;
-            bottom: 15%;
+            bottom: 4%; /* Ajustado más abajo */
             width: 60%;
             max-width: 400px;
             height: 15px;
@@ -188,10 +188,22 @@ HTML = """
             transition: width 0.5s ease-in-out;
         }
 
+        /* Texto del porcentaje */
+        .texto-porcentaje {
+            position: absolute;
+            bottom: 8%; /* Justo encima de la barra */
+            color: white;
+            font-weight: bold;
+            font-size: 1.2rem;
+            text-shadow: 0 0 5px #000, 0 0 10px #4aa3df;
+            z-index: 3;
+        }
+
         /* MAGIA: Si la pantalla está en Horizontal (PC, Tablet) */
         @media (orientation: landscape) {
             .loading-image { content: url('/static/carga_pc.png'); }
-            .barra-carga-container { bottom: 10%; }
+            .barra-carga-container { bottom: 2%; } /* Aún más abajo en PC */
+            .texto-porcentaje { bottom: 6%; }
         }
 
         /* RESTO DEL CSS (APP NORMAL) */
@@ -247,7 +259,8 @@ HTML = """
             .menu-btn { display: block; }
             .chat-header { padding: 15px; font-size: 1.1rem; flex-wrap: wrap; gap: 5px; }
             .sisters-grid { grid-template-columns: repeat(2, 1fr); }
-            .barra-carga-container { width: 80%; bottom: 20%; }
+            .barra-carga-container { width: 80%; bottom: 8%; }
+            .texto-porcentaje { bottom: 12%; }
         }
     </style>
 </head>
@@ -266,6 +279,10 @@ HTML = """
         </div>
 
         <img src="/static/carga.png" alt="Cargando..." class="loading-image">
+        
+        <!-- Texto del porcentaje -->
+        <div class="texto-porcentaje" id="texto-porcentaje">0%</div>
+        
         <div class="barra-carga-container">
             <div class="barra-carga" id="mi-barra"></div>
         </div>
@@ -339,6 +356,7 @@ HTML = """
 
         // LÓGICA DE LA BARRA DE CARGA INTELIGENTE
         const barra = document.getElementById('mi-barra');
+        const textoPorcentaje = document.getElementById('texto-porcentaje');
         let progreso = 0;
         let cargando = true;
 
@@ -347,6 +365,7 @@ HTML = """
             if (cargando && progreso < 90) {
                 progreso += 1;
                 barra.style.width = progreso + '%';
+                textoPorcentaje.innerText = progreso + '%';
             }
         }, 100);
 
@@ -357,6 +376,7 @@ HTML = """
             
             // Llenamos la barra del 90% al 100% de golpe
             barra.style.width = '100%';
+            textoPorcentaje.innerText = '100%';
 
             // Esperamos 1 segundo para que el usuario vea la barra llena
             setTimeout(() => {
