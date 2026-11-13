@@ -125,6 +125,46 @@ HTML = """
             left: 0;
         }
 
+        /* ANIMACIÓN DE PÉTALOS DE CEREZO CAYENDO */
+        .petalos-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        .petalo {
+            position: absolute;
+            top: -10%;
+            width: 15px;
+            height: 15px;
+            background-color: #ffb7c5;
+            border-radius: 15px 0 15px 0;
+            opacity: 0.8;
+            animation: caer linear infinite;
+        }
+
+        .petalo:nth-child(1) { left: 10%; animation-duration: 8s; animation-delay: 0s; width: 12px; height: 12px; }
+        .petalo:nth-child(2) { left: 25%; animation-duration: 10s; animation-delay: 2s; width: 18px; height: 18px; background-color: #ff9eb5; }
+        .petalo:nth-child(3) { left: 40%; animation-duration: 7s; animation-delay: 4s; width: 10px; height: 10px; }
+        .petalo:nth-child(4) { left: 55%; animation-duration: 12s; animation-delay: 1s; width: 16px; height: 16px; }
+        .petalo:nth-child(5) { left: 70%; animation-duration: 9s; animation-delay: 5s; width: 14px; height: 14px; background-color: #ffcad4; }
+        .petalo:nth-child(6) { left: 85%; animation-duration: 11s; animation-delay: 3s; width: 20px; height: 20px; }
+        .petalo:nth-child(7) { left: 50%; animation-duration: 6s; animation-delay: 6s; width: 8px; height: 8px; }
+        .petalo:nth-child(8) { left: 95%; animation-duration: 13s; animation-delay: 2s; width: 15px; height: 15px; }
+
+        @keyframes caer {
+            0% { transform: translateY(0) rotate(0deg) translateX(0); opacity: 0; }
+            10% { opacity: 0.9; }
+            50% { transform: translateY(50vh) rotate(180deg) translateX(20px); }
+            90% { opacity: 0.9; }
+            100% { transform: translateY(110vh) rotate(360deg) translateX(-20px); opacity: 0; }
+        }
+
         /* BARRA ANIMADA INTELIGENTE */
         .barra-carga-container {
             position: absolute;
@@ -145,7 +185,7 @@ HTML = """
             background: linear-gradient(90deg, #00d2ff, #fff, #00d2ff);
             background-size: 200% 100%;
             border-radius: 20px;
-            transition: width 0.5s ease-in-out; /* Transición suave */
+            transition: width 0.5s ease-in-out;
         }
 
         /* MAGIA: Si la pantalla está en Horizontal (PC, Tablet) */
@@ -212,8 +252,19 @@ HTML = """
     </style>
 </head>
 <body>
-    <!-- PANTALLA DE CARGA -->
+    <!-- PANTALLA DE CARGA CON PÉTALOS Y BARRA INTELIGENTE -->
     <div id="loading-screen">
+        <div class="petalos-container">
+            <div class="petalo"></div>
+            <div class="petalo"></div>
+            <div class="petalo"></div>
+            <div class="petalo"></div>
+            <div class="petalo"></div>
+            <div class="petalo"></div>
+            <div class="petalo"></div>
+            <div class="petalo"></div>
+        </div>
+
         <img src="/static/carga.png" alt="Cargando..." class="loading-image">
         <div class="barra-carga-container">
             <div class="barra-carga" id="mi-barra"></div>
@@ -294,7 +345,7 @@ HTML = """
         // 1. La barra empieza a subir lentamente hasta el 90%
         const intervalo = setInterval(() => {
             if (cargando && progreso < 90) {
-                progreso += 1; // Sube 1% cada 100ms (aprox 9 segundos para llegar al 90%)
+                progreso += 1;
                 barra.style.width = progreso + '%';
             }
         }, 100);
