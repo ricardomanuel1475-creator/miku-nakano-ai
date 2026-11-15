@@ -339,6 +339,22 @@ HTML = r"""
         </div>
     </div>
 
+    <!-- MODAL PARA ELEGIR TIEMPO DE BORRADO -->
+    <div class="modal-selector" id="modal-tiempo" style="display: none; z-index: 1001;">
+        <h3>⏳ Límite de chats alcanzado</h3>
+        <p style="color: #555; font-size: 0.9rem; margin-bottom: 15px; line-height: 1.4;">
+            Has llegado al límite de <b>12 chats</b> en este perfil.<br>
+            Para crear uno nuevo, debes borrar el más antiguo. <br><br>
+            <b>¿Cuánto tiempo necesitas para guardar tu información antes de que se borre?</b>
+        </p>
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+            <button class="new-chat-btn" onclick="iniciarTemporizador(2)" style="background: #4aa3df;">2 Minutos (Rápido)</button>
+            <button class="new-chat-btn" onclick="iniciarTemporizador(3)" style="background: #4aa3df;">3 Minutos (Normal)</button>
+            <button class="new-chat-btn" onclick="iniciarTemporizador(5)" style="background: #4aa3df;">5 Minutos (Con calma)</button>
+            <button class="new-chat-btn" onclick="cerrarModalTiempo()" style="background: #ff4d4d; margin-top: 5px;">Cancelar</button>
+        </div>
+    </div>
+
     <div class="sidebar" id="sidebar">
         <div class="profile-header">
             <img id="sidebar-img" src="/static/miku.webp" alt="Miku Nakano">
@@ -458,19 +474,96 @@ HTML = r"""
                     span.innerText = chat[0].texto;
                     span.onclick = () => { cargarChat(id); toggleMenu(); };
                     const btn = document.createElement('button'); btn.className = 'delete-btn'; btn.innerHTML = '🗑️';
+                    
                     btn.onclick = (e) => {
                         e.stopPropagation();
-                        if(confirm('¿Eliminar este chat?')) {
-                            delete chats[id]; guardarChats();
-                            if (currentChatId === id) nuevoChat();
+                        if(confirm('¿Eliminar este chat?')) { 
+                            // ✅ OBTENER EL NOMBRE DEL CHAT ANTES DE BORRARLO
+                            const nombreChatBorrado = chats[id][0]?.texto || "Chat sin título";
+                            
+                            delete chats[id]; 
+                            guardarChats(); 
+                            
+                            // Cancelar el temporizador de borrado automático (porque ya hizo espacio)
+                            if (temporizadorBorrado) {
+                                clearTimeout(temporizadorBorrado);
+                                temporizadorBorrado = null;
+                                idChatAntiguoPendiente = null;
+                                
+                                // Notificar que se canceló el borrado automático
+                                const chatDiv = document.getElementById('chat');
+                                chatDiv.innerHTML += `<div class="mensaje mensaje-miku" style="background:#d4edda; border-color:#c3e6cb; color:#155724; margin-top:10px;">
+                                    <b>Sistema:</b> Has eliminado manualmente el chat: <i>"${escapeHtml(nombreChatBorrado)}"</i>.<br><br>El temporizador de borrado automático ha sido cancelado porque ya hiciste espacio. 💙
+                                </div>`;
+                                chatDiv.scrollTop = chatDiv.scrollHeight;
+                            }
+                            
+                            if (currentChatId === id) nuevoChat(); 
                         }
                     };
+                    
                     div.appendChild(span); div.appendChild(btn); list.appendChild(div);
                 }
             });
         }
 
+        let temporizadorBorrado = null;
+        let idChatAntiguoPendiente = null;
+
         function nuevoChat() {
+            const numChats = Object.keys(chats).length;
+
+            // Si llega a 11 o más, mostramos el modal
+            if (numChats >= 11) {
+                idChatAntiguoPendiente = Object.keys(chats).sort((a, b) => a - b)[0]; // El más antiguo
+                document.getElementById('modal-tiempo').style.display = 'block';
+                document.getElementById('overlay-modal').style.display = 'block';
+                return; // Detenemos la creación hasta que elija el tiempo
+            }
+
+            ejecutarNuevoChat();
+        }
+
+        function iniciarTemporizador(minutos) {
+            cerrarModalTiempo();
+            const ms = minutos * 60000;
+            
+            // Creamos el nuevo chat
+            ejecutarNuevoChat();
+
+            // Avisamos en el chat que el temporizador inició
+            const chatDiv = document.getElementById('chat');
+            chatDiv.innerHTML += `<div class="mensaje mensaje-miku" style="background:#fff3cd; border-color:#ffeeba; color:#856404;">
+                <b>⏳ Aviso del Sistema:</b> Tienes exactamente <b>${minutos} minutos</b> para guardar lo que necesites. Si no borras un chat antiguo manualmente antes de que termine el tiempo, el chat más antiguo se eliminará automáticamente como respaldo.
+            </div>`;
+            chatDiv.scrollTop = chatDiv.scrollHeight;
+
+            // Iniciamos el reloj
+            if (temporizadorBorrado) clearTimeout(temporizadorBorrado);
+
+            temporizadorBorrado = setTimeout(() => {
+                if (chats[idChatAntiguoPendiente]) {
+                    // ✅ OBTENER EL NOMBRE DEL CHAT ANTES DE BORRARLO
+                    const nombreChatBorrado = chats[idChatAntiguoPendiente][0]?.texto || "Chat sin título";
+                    
+                    delete chats[idChatAntiguoPendiente]; // Borra el más antiguo
+                    guardarChats();
+                    
+                    chatDiv.innerHTML += `<div class="mensaje mensaje-miku" style="background:#ffe6e6; border-color:#ffb3b3; color:#cc0000; margin-top:10px;">
+                        <b>Sistema:</b> El tiempo ha terminado. Para liberar espacio, se ha eliminado automáticamente el chat más antiguo, el cual empezaba con:<br><br> <i>"${escapeHtml(nombreChatBorrado)}"</i><br><br>Si necesitabas esa información, lamentablemente ya no está disponible. 💙
+                    </div>`;
+                    chatDiv.scrollTop = chatDiv.scrollHeight;
+                    idChatAntiguoPendiente = null;
+                }
+            }, ms);
+        }
+
+        function cerrarModalTiempo() {
+            document.getElementById('modal-tiempo').style.display = 'none';
+            document.getElementById('overlay-modal').style.display = 'none';
+        }
+
+        function ejecutarNuevoChat() {
             currentChatId = Date.now().toString();
             document.getElementById('chat').innerHTML = `<div class="mensaje mensaje-miku"><b>${currentSister}:</b> ${saludos[currentSister]}</div>`;
             if (document.getElementById('sidebar').classList.contains('active')) toggleMenu();
@@ -494,12 +587,26 @@ HTML = r"""
             const mensaje = input.value.trim();
             if (!mensaje) return;
 
+            // ✅ LÍMITE DE 700 MENSAJES POR CHAT
+            if (chats[currentChatId] && chats[currentChatId].length >= 700) {
+                alert("⚠️ Límite alcanzado: Este chat ya tiene 700 mensajes y no puede recibir más respuestas. Por favor, crea un Nuevo Chat para seguir hablando. 💙");
+                return;
+            }
+
             if (!chats[currentChatId]) chats[currentChatId] = [];
             chats[currentChatId].push({ role: 'user', texto: mensaje });
 
             chatDiv.innerHTML += `<div class="mensaje mensaje-usuario"><b>Tú:</b> ${escapeHtml(mensaje)}</div>`;
             input.value = '';
             chatDiv.scrollTop = chatDiv.scrollHeight;
+
+            // ✅ ADVERTENCIA AL LLEGAR A 698 MENSAJES
+            if (chats[currentChatId].length === 698) {
+                chatDiv.innerHTML += `<div class="mensaje mensaje-miku" style="background:#fff3cd; border-color:#ffeeba; color:#856404;">
+                    <b>⚠️ Aviso del Sistema:</b> Este chat está llegando a su límite (700 mensajes). Pronto ya no podrá seguir respondiendo. Te recomendamos crear un Nuevo Chat para continuar la conversación sin interrupciones. 💙
+                </div>`;
+                chatDiv.scrollTop = chatDiv.scrollHeight;
+            }
 
             const idPensando = 'pensando-' + Date.now();
             chatDiv.innerHTML += `<div class="mensaje mensaje-miku" id="${idPensando}"><b>${currentSister}:</b> Investigando... 🔍</div>`;
