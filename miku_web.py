@@ -831,9 +831,29 @@ def responder():
             historiales[user_id][hermana] = historial_chat[-MAX_TURNOS * 2:]
 
         return jsonify({"respuesta": respuesta_final})
+        
     except Exception as e:
+        error_str = str(e).lower()
         app.logger.error(f"Error Groq: {e}")
-        return jsonify({"respuesta": "Lo siento, tuve un problema al procesar tu mensaje. Intenta de nuevo en un momento. 💙"})
+        
+        # ✅ Interceptar errores técnicos (API Key, cuota, red) con mensajes amigables y sin tecnicismos
+        if any(x in error_str for x in ["invalid api key", "invalid_api_key", "authentication", "unauthorized", "401", "api key", "quota", "rate limit", "429"]):
+            return jsonify({
+                "respuesta": (
+                    "🌸 <b>Vaya, parece que estamos teniendo problemas técnicos.</b> 💙<br><br>"
+                    "Nuestro equipo ya está trabajando para solucionarlo lo antes posible. "
+                    "Por favor, intenta de nuevo en unos minutos. ¡Gracias por tu paciencia! 🌸"
+                )
+            })
+        
+        # Cualquier otro error (red, timeout, etc.)
+        return jsonify({
+            "respuesta": (
+                "💙 <b>Lo siento mucho...</b><br><br>"
+                "Parece que hubo un pequeño problema de conexión al procesar tu mensaje. "
+                "A veces pasa cuando la señal está débil. ¿Podrías intentar de nuevo en un momentito? 💙🌸"
+            )
+        })
 
 
 if __name__ == '__main__':
