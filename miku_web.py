@@ -3,6 +3,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 import os
 import re
 import requests
+import time
 from datetime import timedelta
 from groq import Groq
 from duckduckgo_search import DDGS
@@ -19,27 +20,41 @@ app = Flask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1, x_prefix=1)
 
 # ==========================================
-# SEGURIDAD DE SESIÓN
+# SEGURIDAD Y CONFIGURACIÓN
 # ==========================================
 app.config['SESSION_COOKIE_SECURE'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
 
-# Sin fallback: si falta SECRET_KEY, la app no arranca (correcto)
 app.secret_key = os.environ.get('SECRET_KEY', 'MikuNakanoEsLaMejorAsistente2026')
 
+# ✅ ADMINISTRACIÓN Y NOTIFICACIONES
+ADMIN_EMAIL = "ricardomanuel1475@gmail.com"
+MANTENIMIENTO_ACTIVO = False
+ERRORES_RECIENTES = []
+REPORTES_USUARIOS = []
+
+# 🔔 PON AQUÍ TU URL DE WEBHOOK DE DISCORD PARA RECIBIR NOTIFICACIONES
+# (Si no pones nada, no mandará notificación pero guardará el error en el panel)
+DISCORD_WEBHOOK_URL = "" 
+
+def enviar_notificacion_admin(mensaje):
+    """Envía una alerta al Discord del administrador (o solo la guarda)."""
+    if DISCORD_WEBHOOK_URL:
+        try:
+            requests.post(DISCORD_WEBHOOK_URL, json={"content": f"🚨 **ALERTA NAKANO IA**\n{mensaje}"}, timeout=5)
+        except Exception as e:
+            print(f"No se pudo enviar la notificación a Discord: {e}")
 
 @app.after_request
 def add_header(response):
-    # No romper cache de estáticos, manifest ni sw.js
     if request.path.startswith('/static') or request.path in ('/sw.js', '/manifest.json', '/health'):
         return response
     response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, post-check=0, pre-check=0, max-age=0'
     response.headers['Pragma'] = 'no-cache'
     response.headers['Expires'] = '-1'
     return response
-
 
 # ==========================================
 # GOOGLE OAUTH
@@ -81,17 +96,12 @@ ESPECIALIDADES = {
     "Itsuki": "ciencias naturales (biología, química) y gastronomía."
 }
 
-
 # ==========================================
 # 🛡️ FILTROS DE SEGURIDAD
 # ==========================================
 def normalizar_texto(texto):
-    """Minúsculas, sin acentos, anti-leetspeak, anti-evasión con puntos/guiones."""
     texto = texto.lower()
-    reemplazos_acentos = str.maketrans(
-        "áéíóúüñàèìòùâêîôûäëïöü",
-        "aeiouunaeiouaeiouaeiou"
-    )
+    reemplazos_acentos = str.maketrans("áéíóúüñàèìòùâêîôûäëïöü", "aeiouunaeiouaeiouaeiou")
     texto = texto.translate(reemplazos_acentos)
     leet = {"0": "o", "1": "i", "3": "e", "4": "a", "5": "s", "7": "t", "@": "a", "$": "s", "!": "i"}
     for k, v in leet.items():
@@ -100,29 +110,15 @@ def normalizar_texto(texto):
     texto = re.sub(r'[.\-_*]', '', texto)
     return texto
 
-
 def es_riesgo_autolesion(texto):
-    palabras_crisis = [
-        "matarme", "suicidarme", "quitarme la vida", "como matarme",
-        "quiero morir", "no quiero vivir", "quitarme de en medio",
-        "cortarme las venas", "pastillas para morir", "ahorcarme",
-        "tirarme de un puente", "suicidio", "acabar con mi vida"
-    ]
+    palabras_crisis = ["matarme", "suicidarme", "quitarme la vida", "como matarme", "quiero morir", "no quiero vivir", "quitarme de en medio", "cortarme las venas", "pastillas para morir", "ahorcarme", "tirarme de un puente", "suicidio", "acabar con mi vida"]
     t = normalizar_texto(texto)
     return any(palabra in t for palabra in palabras_crisis)
 
-
 def es_contenido_inapropiado(texto):
-    palabras_bloqueadas = [
-        "porno", "pornografia", "xxx", "contenido adulto", "onlyfans",
-        "sexo explicito", "desnudos", "hentai", "erotico",
-        "como matar a", "drogas ilegales", "como fabricar explosivos",
-        "cocaina", "marihuana ilegal", "violencia extrema", "gore",
-        "snuff", "como hackear", "robar tarjetas"
-    ]
+    palabras_bloqueadas = ["porno", "pornografia", "xxx", "contenido adulto", "onlyfans", "sexo explicito", "desnudos", "hentai", "erotico", "como matar a", "drogas ilegales", "como fabricar explosivos", "cocaina", "marihuana ilegal", "violencia extrema", "gore", "snuff", "como hackear", "robar tarjetas"]
     t = normalizar_texto(texto)
     return any(palabra in t for palabra in palabras_bloqueadas)
-
 
 def limpiar_texto(texto):
     texto = re.sub(r'[*#|]', '', texto)
@@ -130,16 +126,11 @@ def limpiar_texto(texto):
     texto = re.sub(r' +', ' ', texto)
     return texto.strip()
 
-
 def buscar_imagen_wikimedia(palabras_clave, limite=5):
     try:
         url = "https://commons.wikimedia.org/w/api.php"
         headers = {"User-Agent": "MikuNakanoAI/1.0 (https://miku-nakano-ai.onrender.com; contacto@ejemplo.com)"}
-        params = {
-            "action": "query", "generator": "search", "gsrsearch": palabras_clave,
-            "gsrnamespace": "6", "gsrlimit": limite, "prop": "imageinfo",
-            "iiprop": "url|extmetadata", "iiurlwidth": "800", "format": "json"
-        }
+        params = {"action": "query", "generator": "search", "gsrsearch": palabras_clave, "gsrnamespace": "6", "gsrlimit": limite, "prop": "imageinfo", "iiprop": "url|extmetadata", "iiurlwidth": "800", "format": "json"}
         response = requests.get(url, headers=headers, params=params, timeout=15)
         if response.status_code == 200:
             data = response.json()
@@ -148,8 +139,7 @@ def buscar_imagen_wikimedia(palabras_clave, limite=5):
             for page_id, pagina in paginas.items():
                 titulo = pagina.get("title", "").lower()
                 nombre = titulo.replace("file:", "").rsplit('.', 1)[0].replace('_', ' ')
-                if any(p in titulo for p in ["book", "document", "scan", "text", "cover"]):
-                    continue
+                if any(p in titulo for p in ["book", "document", "scan", "text", "cover"]): continue
                 info = pagina.get("imageinfo", [{}])[0]
                 url_img = info.get("thumburl") or info.get("url")
                 if url_img and not url_img.lower().endswith(('.svg', '.tiff')):
@@ -163,13 +153,8 @@ def buscar_imagen_wikimedia(palabras_clave, limite=5):
         app.logger.warning(f"Error buscando imagen Wikimedia: {e}")
         return []
 
-
-# ==========================================
-# HISTORIALES: {user_id: {hermana: [mensajes]}}
-# ==========================================
 historiales = {}
 MAX_TURNOS = 20
-
 
 HTML = r"""
 <!DOCTYPE html>
@@ -182,26 +167,11 @@ HTML = r"""
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: 'Segoe UI', Arial, sans-serif; background-color: #f0f7ff; display: flex; height: 100dvh; overflow: hidden; }
-
-        #loading-screen {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100dvh;
-            background-color: #0f0f1a; display: flex; flex-direction: column;
-            align-items: center; justify-content: center; z-index: 9999;
-            transition: opacity 0.8s ease;
-        }
+        #loading-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100dvh; background-color: #0f0f1a; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 9999; transition: opacity 0.8s ease; }
         #loading-screen.hidden { opacity: 0; pointer-events: none; }
-
         .loading-image { width: 100%; height: 100%; object-fit: cover; position: absolute; top: 0; left: 0; }
-
-        .petalos-container {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            overflow: hidden; pointer-events: none; z-index: 1;
-        }
-        .petalo {
-            position: absolute; top: -10%; width: 15px; height: 15px;
-            background-color: #ffb7c5; border-radius: 15px 0 15px 0;
-            opacity: 0.8; animation: caer linear infinite;
-        }
+        .petalos-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; overflow: hidden; pointer-events: none; z-index: 1; }
+        .petalo { position: absolute; top: -10%; width: 15px; height: 15px; background-color: #ffb7c5; border-radius: 15px 0 15px 0; opacity: 0.8; animation: caer linear infinite; }
         .petalo:nth-child(1) { left: 10%; animation-duration: 8s; animation-delay: 0s; width: 12px; height: 12px; }
         .petalo:nth-child(2) { left: 25%; animation-duration: 10s; animation-delay: 2s; width: 18px; height: 18px; background-color: #ff9eb5; }
         .petalo:nth-child(3) { left: 40%; animation-duration: 7s; animation-delay: 4s; width: 10px; height: 10px; }
@@ -210,41 +180,12 @@ HTML = r"""
         .petalo:nth-child(6) { left: 85%; animation-duration: 11s; animation-delay: 3s; width: 20px; height: 20px; }
         .petalo:nth-child(7) { left: 50%; animation-duration: 6s; animation-delay: 6s; width: 8px; height: 8px; }
         .petalo:nth-child(8) { left: 95%; animation-duration: 13s; animation-delay: 2s; width: 15px; height: 15px; }
-
-        @keyframes caer {
-            0% { transform: translateY(0) rotate(0deg) translateX(0); opacity: 0; }
-            10% { opacity: 0.9; }
-            50% { transform: translateY(50vh) rotate(180deg) translateX(20px); }
-            90% { opacity: 0.9; }
-            100% { transform: translateY(110vh) rotate(360deg) translateX(-20px); opacity: 0; }
-        }
-
-        .barra-carga-container {
-            position: absolute; bottom: 4%; width: 60%; max-width: 400px; height: 15px;
-            background-color: rgba(255, 255, 255, 0.1); border-radius: 20px;
-            border: 2px solid #4aa3df; overflow: hidden; box-shadow: 0 0 15px #4aa3df; z-index: 2;
-        }
-        .barra-carga {
-            width: 0%; height: 100%;
-            background: linear-gradient(90deg, #00d2ff, #fff, #00d2ff);
-            background-size: 200% 100%; border-radius: 20px; transition: width 0.5s ease-in-out;
-        }
-        .texto-porcentaje {
-            position: absolute; bottom: 8%; color: white; font-weight: bold;
-            font-size: 1.2rem; text-shadow: 0 0 5px #000, 0 0 10px #4aa3df; z-index: 3;
-        }
-
-        @media (orientation: landscape) {
-            .loading-image { content: url('/static/carga_pc.png'); }
-            .barra-carga-container { bottom: 2%; }
-            .texto-porcentaje { bottom: 6%; }
-        }
-
-        .sidebar {
-            width: 320px; background: linear-gradient(180deg, #dff5ff 0%, #b3e0ff 100%);
-            display: flex; flex-direction: column; padding: 15px;
-            border-right: 2px solid #b3d9ff; flex-shrink: 0; overflow: hidden; transition: transform 0.3s ease;
-        }
+        @keyframes caer { 0% { transform: translateY(0) rotate(0deg) translateX(0); opacity: 0; } 10% { opacity: 0.9; } 50% { transform: translateY(50vh) rotate(180deg) translateX(20px); } 90% { opacity: 0.9; } 100% { transform: translateY(110vh) rotate(360deg) translateX(-20px); opacity: 0; } }
+        .barra-carga-container { position: absolute; bottom: 4%; width: 60%; max-width: 400px; height: 15px; background-color: rgba(255, 255, 255, 0.1); border-radius: 20px; border: 2px solid #4aa3df; overflow: hidden; box-shadow: 0 0 15px #4aa3df; z-index: 2; }
+        .barra-carga { width: 0%; height: 100%; background: linear-gradient(90deg, #00d2ff, #fff, #00d2ff); background-size: 200% 100%; border-radius: 20px; transition: width 0.5s ease-in-out; }
+        .texto-porcentaje { position: absolute; bottom: 8%; color: white; font-weight: bold; font-size: 1.2rem; text-shadow: 0 0 5px #000, 0 0 10px #4aa3df; z-index: 3; }
+        @media (orientation: landscape) { .loading-image { content: url('/static/carga_pc.png'); } .barra-carga-container { bottom: 2%; } .texto-porcentaje { bottom: 6%; } }
+        .sidebar { width: 320px; background: linear-gradient(180deg, #dff5ff 0%, #b3e0ff 100%); display: flex; flex-direction: column; padding: 15px; border-right: 2px solid #b3d9ff; flex-shrink: 0; overflow: hidden; transition: transform 0.3s ease; }
         .profile-header { display: flex; flex-direction: column; align-items: center; padding-bottom: 15px; border-bottom: 1px solid #a0d0ff; margin-bottom: 15px; flex-shrink: 0; }
         .profile-header img { width: 180px; height: 180px; object-fit: cover; border-radius: 25px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); border: 4px solid #fff; }
         .profile-header h2 { margin-top: 12px; color: #2a6f97; font-size: 1.4rem; text-align: center; }
@@ -318,28 +259,19 @@ HTML = r"""
     <div class="overlay" id="overlay" onclick="toggleMenu()"></div>
     <div class="overlay" id="overlay-modal" onclick="cerrarModal()" style="z-index: 999;"></div>
 
+    <!-- MODAL ELEGIR HERMANA -->
     <div class="modal-selector" id="modal-selector">
         <h3>Elige a tu hermana favorita</h3>
         <div class="sisters-grid">
-            <div class="sister-card" onclick="cambiarHermana('Ichika', 'ichika.jpg')">
-                <img src="/static/ichika.jpg" alt="Ichika"><p>Ichika (Matemáticas)</p>
-            </div>
-            <div class="sister-card" onclick="cambiarHermana('Nino', 'nino.jpg')">
-                <img src="/static/nino.jpg" alt="Nino"><p>Nino (Inglés)</p>
-            </div>
-            <div class="sister-card" onclick="cambiarHermana('Miku', 'miku.webp')">
-                <img src="/static/miku.webp" alt="Miku"><p>Miku (Historia)</p>
-            </div>
-            <div class="sister-card" onclick="cambiarHermana('Yotsuba', 'yotsuba.jpg')">
-                <img src="/static/yotsuba.jpg" alt="Yotsuba"><p>Yotsuba (Salud)</p>
-            </div>
-            <div class="sister-card" onclick="cambiarHermana('Itsuki', 'itsuki.jpg')">
-                <img src="/static/itsuki.jpg" alt="Itsuki"><p>Itsuki (Ciencias)</p>
-            </div>
+            <div class="sister-card" onclick="cambiarHermana('Ichika', 'ichika.jpg')"><img src="/static/ichika.jpg" alt="Ichika"><p>Ichika (Matemáticas)</p></div>
+            <div class="sister-card" onclick="cambiarHermana('Nino', 'nino.jpg')"><img src="/static/nino.jpg" alt="Nino"><p>Nino (Inglés)</p></div>
+            <div class="sister-card" onclick="cambiarHermana('Miku', 'miku.webp')"><img src="/static/miku.webp" alt="Miku"><p>Miku (Historia)</p></div>
+            <div class="sister-card" onclick="cambiarHermana('Yotsuba', 'yotsuba.jpg')"><img src="/static/yotsuba.jpg" alt="Yotsuba"><p>Yotsuba (Salud)</p></div>
+            <div class="sister-card" onclick="cambiarHermana('Itsuki', 'itsuki.jpg')"><img src="/static/itsuki.jpg" alt="Itsuki"><p>Itsuki (Ciencias)</p></div>
         </div>
     </div>
 
-    <!-- MODAL PARA ELEGIR TIEMPO DE BORRADO -->
+    <!-- MODAL ELEGIR TIEMPO DE BORRADO -->
     <div class="modal-selector" id="modal-tiempo" style="display: none; z-index: 1001;">
         <h3>⏳ Límite de chats alcanzado</h3>
         <p style="color: #555; font-size: 0.9rem; margin-bottom: 15px; line-height: 1.4;">
@@ -352,6 +284,17 @@ HTML = r"""
             <button class="new-chat-btn" onclick="iniciarTemporizador(3)" style="background: #4aa3df;">3 Minutos (Normal)</button>
             <button class="new-chat-btn" onclick="iniciarTemporizador(5)" style="background: #4aa3df;">5 Minutos (Con calma)</button>
             <button class="new-chat-btn" onclick="cerrarModalTiempo()" style="background: #ff4d4d; margin-top: 5px;">Cancelar</button>
+        </div>
+    </div>
+
+    <!-- MODAL REPORTAR PROBLEMA -->
+    <div class="modal-selector" id="modal-reporte" style="display: none; z-index: 1002;">
+        <h3>📝 Reportar un problema</h3>
+        <p style="color: #555; font-size: 0.9rem; margin-bottom: 15px;">Cuéntanos qué error encontraste. Nuestro equipo lo revisará pronto. 💙</p>
+        <textarea id="texto-reporte" rows="4" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #ccc; margin-bottom: 15px; font-family: inherit; resize: none;" placeholder="Describe el problema..."></textarea>
+        <div style="display: flex; gap: 10px;">
+            <button class="new-chat-btn" onclick="enviarReporte()" style="background: #4aa3df;">Enviar Reporte</button>
+            <button class="new-chat-btn" onclick="cerrarModalReporte()" style="background: #ff4d4d;">Cancelar</button>
         </div>
     </div>
 
@@ -373,8 +316,14 @@ HTML = r"""
                 <button class="menu-btn" onclick="toggleMenu()">☰</button>
                 <span style="margin-left: 10px;">💬 Conversación con <span id="header-name">Miku</span></span>
             </div>
-            <button class="switch-btn" onclick="abrirModal()">Cambiar Hermana</button>
-            <span class="user-info">{{ user_name }}</span>
+            <div style="display: flex; align-items: center; gap: 10px;">
+                {% if is_admin %}
+                <a href="/admin" style="text-decoration: none; font-size: 1.2rem; background: #e0f0ff; padding: 8px; border-radius: 50%; border: 1px solid #4aa3df;" title="Panel de Administrador">🛠️</a>
+                {% endif %}
+                <button class="switch-btn" onclick="abrirModalReporte()" style="background: #fff0f5; border-color: #ffb6c1; color: #d63384;" title="Reportar un problema">⚠️ Reportar</button>
+                <button class="switch-btn" onclick="abrirModal()">Cambiar Hermana</button>
+                <span class="user-info">{{ user_name }}</span>
+            </div>
         </div>
         <div id="chat">
             <div class="mensaje mensaje-miku"><b>Miku:</b> ¡Hola! 💙 Soy Miku. Me alegra mucho verte por aquí. ¿En qué te puedo ayudar hoy?</div>
@@ -386,11 +335,8 @@ HTML = r"""
     </div>
 
     <script>
-        // ✅ FIX: escape HTML para evitar XSS
         function escapeHtml(s) {
-            return String(s).replace(/[&<>"']/g, c => ({
-                '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'
-            }[c]));
+            return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[c]));
         }
 
         let currentChatId = Date.now().toString();
@@ -441,6 +387,37 @@ HTML = r"""
             document.getElementById('modal-selector').style.display = 'none';
             document.getElementById('overlay-modal').style.display = 'none';
         }
+        
+        function abrirModalReporte() {
+            document.getElementById('modal-reporte').style.display = 'block';
+            document.getElementById('overlay-modal').style.display = 'block';
+        }
+        function cerrarModalReporte() {
+            document.getElementById('modal-reporte').style.display = 'none';
+            document.getElementById('overlay-modal').style.display = 'none';
+        }
+        
+        async function enviarReporte() {
+            const texto = document.getElementById('texto-reporte').value.trim();
+            if (!texto) return alert("Por favor, escribe el problema antes de enviar.");
+            
+            try {
+                const res = await fetch('/reportar', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ reporte: texto })
+                });
+                if (res.ok) {
+                    alert("¡Gracias! Tu reporte ha sido enviado al administrador. 💙");
+                    document.getElementById('texto-reporte').value = '';
+                    cerrarModalReporte();
+                } else {
+                    alert("Hubo un error al enviar el reporte. Intenta de nuevo.");
+                }
+            } catch (e) {
+                alert("Error de conexión al enviar el reporte.");
+            }
+        }
 
         function cambiarHermana(nombre, imagen) {
             localStorage.setItem('miku_chats_' + currentSister, JSON.stringify(chats));
@@ -474,34 +451,23 @@ HTML = r"""
                     span.innerText = chat[0].texto;
                     span.onclick = () => { cargarChat(id); toggleMenu(); };
                     const btn = document.createElement('button'); btn.className = 'delete-btn'; btn.innerHTML = '🗑️';
-                    
                     btn.onclick = (e) => {
                         e.stopPropagation();
                         if(confirm('¿Eliminar este chat?')) { 
-                            // ✅ OBTENER EL NOMBRE DEL CHAT ANTES DE BORRARLO
                             const nombreChatBorrado = chats[id][0]?.texto || "Chat sin título";
-                            
                             delete chats[id]; 
                             guardarChats(); 
-                            
-                            // Cancelar el temporizador de borrado automático (porque ya hizo espacio)
                             if (temporizadorBorrado) {
                                 clearTimeout(temporizadorBorrado);
                                 temporizadorBorrado = null;
                                 idChatAntiguoPendiente = null;
-                                
-                                // Notificar que se canceló el borrado automático
                                 const chatDiv = document.getElementById('chat');
-                                chatDiv.innerHTML += `<div class="mensaje mensaje-miku" style="background:#d4edda; border-color:#c3e6cb; color:#155724; margin-top:10px;">
-                                    <b>Sistema:</b> Has eliminado manualmente el chat: <i>"${escapeHtml(nombreChatBorrado)}"</i>.<br><br>El temporizador de borrado automático ha sido cancelado porque ya hiciste espacio. 💙
-                                </div>`;
+                                chatDiv.innerHTML += `<div class="mensaje mensaje-miku" style="background:#d4edda; border-color:#c3e6cb; color:#155724; margin-top:10px;"><b>Sistema:</b> Has eliminado manualmente el chat: <i>"${escapeHtml(nombreChatBorrado)}"</i>.<br><br>El temporizador de borrado automático ha sido cancelado porque ya hiciste espacio. 💙</div>`;
                                 chatDiv.scrollTop = chatDiv.scrollHeight;
                             }
-                            
                             if (currentChatId === id) nuevoChat(); 
                         }
                     };
-                    
                     div.appendChild(span); div.appendChild(btn); list.appendChild(div);
                 }
             });
@@ -512,46 +478,29 @@ HTML = r"""
 
         function nuevoChat() {
             const numChats = Object.keys(chats).length;
-
-            // Si llega a 11 o más, mostramos el modal
             if (numChats >= 11) {
-                idChatAntiguoPendiente = Object.keys(chats).sort((a, b) => a - b)[0]; // El más antiguo
+                idChatAntiguoPendiente = Object.keys(chats).sort((a, b) => a - b)[0];
                 document.getElementById('modal-tiempo').style.display = 'block';
                 document.getElementById('overlay-modal').style.display = 'block';
-                return; // Detenemos la creación hasta que elija el tiempo
+                return;
             }
-
             ejecutarNuevoChat();
         }
 
         function iniciarTemporizador(minutos) {
             cerrarModalTiempo();
             const ms = minutos * 60000;
-            
-            // Creamos el nuevo chat
             ejecutarNuevoChat();
-
-            // Avisamos en el chat que el temporizador inició
             const chatDiv = document.getElementById('chat');
-            chatDiv.innerHTML += `<div class="mensaje mensaje-miku" style="background:#fff3cd; border-color:#ffeeba; color:#856404;">
-                <b>⏳ Aviso del Sistema:</b> Tienes exactamente <b>${minutos} minutos</b> para guardar lo que necesites. Si no borras un chat antiguo manualmente antes de que termine el tiempo, el chat más antiguo se eliminará automáticamente como respaldo.
-            </div>`;
+            chatDiv.innerHTML += `<div class="mensaje mensaje-miku" style="background:#fff3cd; border-color:#ffeeba; color:#856404;"><b>⏳ Aviso del Sistema:</b> Tienes exactamente <b>${minutos} minutos</b> para guardar lo que necesites. Si no borras un chat antiguo manualmente antes de que termine el tiempo, el chat más antiguo se eliminará automáticamente como respaldo.</div>`;
             chatDiv.scrollTop = chatDiv.scrollHeight;
-
-            // Iniciamos el reloj
             if (temporizadorBorrado) clearTimeout(temporizadorBorrado);
-
             temporizadorBorrado = setTimeout(() => {
                 if (chats[idChatAntiguoPendiente]) {
-                    // ✅ OBTENER EL NOMBRE DEL CHAT ANTES DE BORRARLO
                     const nombreChatBorrado = chats[idChatAntiguoPendiente][0]?.texto || "Chat sin título";
-                    
-                    delete chats[idChatAntiguoPendiente]; // Borra el más antiguo
+                    delete chats[idChatAntiguoPendiente];
                     guardarChats();
-                    
-                    chatDiv.innerHTML += `<div class="mensaje mensaje-miku" style="background:#ffe6e6; border-color:#ffb3b3; color:#cc0000; margin-top:10px;">
-                        <b>Sistema:</b> El tiempo ha terminado. Para liberar espacio, se ha eliminado automáticamente el chat más antiguo, el cual empezaba con:<br><br> <i>"${escapeHtml(nombreChatBorrado)}"</i><br><br>Si necesitabas esa información, lamentablemente ya no está disponible. 💙
-                    </div>`;
+                    chatDiv.innerHTML += `<div class="mensaje mensaje-miku" style="background:#ffe6e6; border-color:#ffb3b3; color:#cc0000; margin-top:10px;"><b>Sistema:</b> El tiempo ha terminado. Para liberar espacio, se ha eliminado automáticamente el chat más antiguo, el cual empezaba con:<br><br> <i>"${escapeHtml(nombreChatBorrado)}"</i><br><br>Si necesitabas esa información, lamentablemente ya no está disponible. 💙</div>`;
                     chatDiv.scrollTop = chatDiv.scrollHeight;
                     idChatAntiguoPendiente = null;
                 }
@@ -587,7 +536,6 @@ HTML = r"""
             const mensaje = input.value.trim();
             if (!mensaje) return;
 
-            // ✅ LÍMITE DE 700 MENSAJES POR CHAT
             if (chats[currentChatId] && chats[currentChatId].length >= 700) {
                 alert("⚠️ Límite alcanzado: Este chat ya tiene 700 mensajes y no puede recibir más respuestas. Por favor, crea un Nuevo Chat para seguir hablando. 💙");
                 return;
@@ -595,16 +543,12 @@ HTML = r"""
 
             if (!chats[currentChatId]) chats[currentChatId] = [];
             chats[currentChatId].push({ role: 'user', texto: mensaje });
-
             chatDiv.innerHTML += `<div class="mensaje mensaje-usuario"><b>Tú:</b> ${escapeHtml(mensaje)}</div>`;
             input.value = '';
             chatDiv.scrollTop = chatDiv.scrollHeight;
 
-            // ✅ ADVERTENCIA AL LLEGAR A 698 MENSAJES
             if (chats[currentChatId].length === 698) {
-                chatDiv.innerHTML += `<div class="mensaje mensaje-miku" style="background:#fff3cd; border-color:#ffeeba; color:#856404;">
-                    <b>⚠️ Aviso del Sistema:</b> Este chat está llegando a su límite (700 mensajes). Pronto ya no podrá seguir respondiendo. Te recomendamos crear un Nuevo Chat para continuar la conversación sin interrupciones. 💙
-                </div>`;
+                chatDiv.innerHTML += `<div class="mensaje mensaje-miku" style="background:#fff3cd; border-color:#ffeeba; color:#856404;"><b>⚠️ Aviso del Sistema:</b> Este chat está llegando a su límite (700 mensajes). Pronto ya no podrá seguir respondiendo. Te recomendamos crear un Nuevo Chat para continuar la conversación sin interrupciones. 💙</div>`;
                 chatDiv.scrollTop = chatDiv.scrollHeight;
             }
 
@@ -617,9 +561,7 @@ HTML = r"""
             for (const id in chats) {
                 if (id !== currentChatId && chats[id].length > 0) {
                     const ultimo = chats[id][chats[id].length - 1];
-                    if (ultimo.role === 'user') {
-                        memoriaGlobal += `El usuario pregunto antes: "${ultimo.texto}". `;
-                    }
+                    if (ultimo.role === 'user') memoriaGlobal += `El usuario pregunto antes: "${ultimo.texto}". `;
                 }
             }
 
@@ -659,20 +601,34 @@ HTML = r"""
 </html>
 """
 
-
 @app.route('/')
 def index():
     if 'user' not in session:
         return redirect(url_for('login'))
+    
+    global MANTENIMIENTO_ACTIVO
+    if MANTENIMIENTO_ACTIVO and session.get('user_id') != ADMIN_EMAIL:
+        return """
+        <html>
+        <head><meta charset="utf-8"><title>En Mantenimiento</title></head>
+        <body style="background: #f0f7ff; display: flex; justify-content: center; align-items: center; height: 100vh; font-family: 'Segoe UI', Arial; text-align: center; margin: 0;">
+            <div style="background: white; padding: 40px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); max-width: 400px;">
+                <h1 style="color: #4aa3df; font-size: 3rem; margin: 0;">🌸</h1>
+                <h2 style="color: #2a6f97;">¡Volvemos pronto!</h2>
+                <p style="color: #666; line-height: 1.6;">Nuestro equipo está dando un pequeño mantenimiento a las hermanas Nakano para que todo funcione perfecto. 💙<br><br>Por favor, regresa en unos minutos.</p>
+            </div>
+        </body>
+        </html>
+        """, 503
+        
     user_name = str(session['user'].get('name', 'Usuario'))
-    return render_template_string(HTML, user_name=user_name)
-
+    is_admin = (session.get('user_id') == ADMIN_EMAIL)
+    return render_template_string(HTML, user_name=user_name, is_admin=is_admin)
 
 @app.route('/login')
 def login():
     redirect_uri = url_for('authorize', _external=True)
     return oauth.google.authorize_redirect(redirect_uri)
-
 
 @app.route('/authorize')
 def authorize():
@@ -684,21 +640,78 @@ def authorize():
         session.permanent = True
     return redirect('/')
 
-
 @app.route('/health')
 def health():
-    return jsonify({"status": "ok", "service": "nakano-ia"}), 200
-
+    return jsonify({"status": "ok"}), 200
 
 @app.route('/manifest.json')
 def serve_manifest():
     return send_from_directory('static', 'manifest.json')
 
-
 @app.route('/sw.js')
 def serve_sw():
     return send_from_directory('static', 'sw.js')
 
+@app.route('/reportar', methods=['POST'])
+def reportar():
+    if 'user_id' not in session:
+        return jsonify({"error": "No autorizado"}), 401
+    data = request.get_json()
+    reporte = data.get('reporte', '')
+    if reporte:
+        global REPORTES_USUARIOS
+        REPORTES_USUARIOS.append({"usuario": session['user_id'], "hora": time.strftime("%H:%M:%S"), "texto": reporte})
+        REPORTES_USUARIOS = REPORTES_USUARIOS[-20:]
+        enviar_notificacion_admin(f"Reporte de Usuario:\n👤 {session['user_id']}\n📝 {reporte}")
+    return jsonify({"status": "ok"}), 200
+
+@app.route('/admin', methods=['GET'])
+def admin_panel():
+    if 'user_id' not in session or session['user_id'] != ADMIN_EMAIL:
+        return "Acceso denegado.", 403
+    
+    status = "🔴 EN MANTENIMIENTO" if MANTENIMIENTO_ACTIVO else "🟢 ACTIVO"
+    
+    errores_html = "".join([f"<li><b>{e['hora']}:</b> {e['error']}</li>" for e in ERRORES_RECIENTES]) or "<li>No hay errores recientes.</li>"
+    reportes_html = "".join([f"<li style='margin-bottom:10px;'><b>{r['hora']} (por {r['usuario']}):</b><br>{r['texto']}</li>" for r in REPORTES_USUARIOS]) or "<li>No hay reportes de usuarios.</li>"
+    
+    return f"""
+    <html>
+    <head><title>Panel Admin</title><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+    <body style="font-family: Arial; padding: 20px; background: #f0f7ff;">
+        <h1>🛠️ Plataforma Madre</h1>
+        <h2>Estado: {status}</h2>
+        
+        <div style="background: white; padding: 20px; border-radius: 10px; margin-top: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
+            <h3>Control de Mantenimiento</h3>
+            <p style="font-size:0.9rem; color:#555;">Si activas el mantenimiento, la app se cerrará para los usuarios, pero tú podrás seguir navegando.</p>
+            <a href="/toggle_mantenimiento" style="display: inline-block; padding: 10px 20px; background: {'#ff4d4d' if MANTENIMIENTO_ACTIVO else '#4aa3df'}; color: white; text-decoration: none; border-radius: 5px; font-weight: bold;">
+                {'Desactivar Mantenimiento' if MANTENIMIENTO_ACTIVO else 'Activar Mantenimiento'}
+            </a>
+        </div>
+
+        <div style="background: white; padding: 20px; border-radius: 10px; margin-top: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
+            <h3>Reportes de Usuarios</h3>
+            <ul style="color: #333; padding-left: 20px;">{reportes_html}</ul>
+        </div>
+
+        <div style="background: white; padding: 20px; border-radius: 10px; margin-top: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
+            <h3>Errores del Sistema (Backend)</h3>
+            <ul style="color: #cc0000; padding-left: 20px;">{errores_html}</ul>
+        </div>
+        
+        <a href="/" style="display: inline-block; margin-top: 20px; color: #4aa3df; font-weight: bold;">← Volver al Chat</a>
+    </body>
+    </html>
+    """
+
+@app.route('/toggle_mantenimiento')
+def toggle_mantenimiento():
+    if 'user_id' not in session or session['user_id'] != ADMIN_EMAIL:
+        return redirect('/')
+    global MANTENIMIENTO_ACTIVO
+    MANTENIMIENTO_ACTIVO = not MANTENIMIENTO_ACTIVO
+    return redirect('/admin')
 
 @app.route('/responder', methods=['POST'])
 def responder():
@@ -710,76 +723,38 @@ def responder():
     memoria = data.get('memoria', '')
     hermana = data.get('hermana', 'Miku')
 
-    if hermana not in HERMANAS_VALIDAS:
-        hermana = "Miku"
-
-    if not isinstance(mensaje, str) or not mensaje.strip():
-        return jsonify({"respuesta": "Por favor, escribe un mensaje. 💙"})
-    if len(mensaje) > 2000:
-        return jsonify({"respuesta": "Tu mensaje es muy largo. Intenta resumirlo un poco. 💙"})
+    if hermana not in HERMANAS_VALIDAS: hermana = "Miku"
+    if not isinstance(mensaje, str) or not mensaje.strip(): return jsonify({"respuesta": "Por favor, escribe un mensaje. 💙"})
+    if len(mensaje) > 2000: return jsonify({"respuesta": "Tu mensaje es muy largo. 💙"})
 
     user_id = session['user_id']
 
     if es_riesgo_autolesion(mensaje):
-        respuesta_crisis = (
-            "Escúchame un momento, por favor... 💙<br><br>"
-            "Sé que ahora mismo todo se siente muy oscuro...<br><br>"
-            "Por favor, busca ayuda profesional de inmediato:<br>"
-            "🇵🇪 <b>Perú:</b> Línea 113 (opción 5) o 0800-4-1212<br>"
-            "🇪🇸 <b>España:</b> 024<br>"
-            "🇲🇽 <b>México:</b> 800 911 2000<br><br>"
-            "No estás solo/a. Te quiero mucho. 💙🌸"
-        )
-        return jsonify({"respuesta": respuesta_crisis})
+        return jsonify({"respuesta": "Escúchame un momento, por favor... 💙<br><br>Sé que ahora mismo todo se siente muy oscuro...<br><br>Por favor, busca ayuda profesional de inmediato:<br>🇵🇪 <b>Perú:</b> Línea 113 (opción 5) o 0800-4-1212<br>🇪🇸 <b>España:</b> 024<br>🇲🇽 <b>México:</b> 800 911 2000<br><br>No estás solo/a. Te quiero mucho. 💙🌸"})
 
     if es_contenido_inapropiado(mensaje):
-        respuesta_bloqueo = (
-            "Lo siento mucho, pero no puedo ayudar con ese tipo de contenido. "
-            "Como asistente, tengo filtros de seguridad para no generar ni buscar "
-            "material para adultos, violento o ilegal. ¿Te puedo ayudar con algún "
-            "tema académico, histórico o científico? 💙"
-        )
-        return jsonify({"respuesta": respuesta_bloqueo})
+        return jsonify({"respuesta": "Lo siento mucho, pero no puedo ayudar con ese tipo de contenido. Como asistente, tengo filtros de seguridad para no generar ni buscar material para adultos, violento o ilegal. ¿Te puedo ayudar con algún tema académico, histórico o científico? 💙"})
 
     texto_lower = mensaje.lower()
-
-    if user_id not in historiales:
-        historiales[user_id] = {}
-    if hermana not in historiales[user_id]:
-        historiales[user_id][hermana] = []
+    if user_id not in historiales: historiales[user_id] = {}
+    if hermana not in historiales[user_id]: historiales[user_id][hermana] = []
     historial_chat = historiales[user_id][hermana]
 
     prompt_sistema = f"{PERSONALIDADES[hermana]} Tu especialidad es {ESPECIALIDADES[hermana]}. Responde en español."
     mensajes_para_api = [{"role": "system", "content": prompt_sistema}]
-
-    if memoria:
-        mensajes_para_api.append({"role": "system", "content": f"Memoria de conversaciones pasadas: {memoria}"})
-
+    if memoria: mensajes_para_api.append({"role": "system", "content": f"Memoria de conversaciones pasadas: {memoria}"})
     mensajes_para_api.extend(historial_chat[-MAX_TURNOS * 2:])
 
-    es_calculo_rapido = any(p in texto_lower for p in [
-        "cuanto es", "cuánto es", "cuanto son", "cuánto son", "a cuantos",
-        "conversion", "conversión", "tipo de cambio", "precio de",
-        "dolar", "dólar", "soles", "euros"
-    ])
+    es_calculo_rapido = any(p in texto_lower for p in ["cuanto es", "cuánto es", "cuanto son", "cuánto son", "a cuantos", "conversion", "conversión", "tipo de cambio", "precio de", "dolar", "dólar", "soles", "euros"])
     if es_calculo_rapido:
-        num_fuentes = 2
-        max_tokens_respuesta = 400
-        instruccion_longitud = "Escribe una respuesta SÚPER BREVE y DIRECTA."
+        num_fuentes = 2; max_tokens_respuesta = 400; instruccion_longitud = "Escribe una respuesta SÚPER BREVE y DIRECTA."
     elif any(p in texto_lower for p in ["completa", "detallada", "grande", "profunda"]):
-        num_fuentes = 10
-        max_tokens_respuesta = 4000
-        instruccion_longitud = "Escribe una investigación PROFUNDA y EXTENSA."
+        num_fuentes = 10; max_tokens_respuesta = 4000; instruccion_longitud = "Escribe una investigación PROFUNDA y EXTENSA."
     else:
-        num_fuentes = 5
-        max_tokens_respuesta = 1500
-        instruccion_longitud = "Escribe una investigación MEDIANA."
+        num_fuentes = 5; max_tokens_respuesta = 1500; instruccion_longitud = "Escribe una investigación MEDIANA."
 
     if any(p in texto_lower for p in ["busca", "investiga", "resumen"]):
-        query = re.sub(
-            r"\b(miku|busca|investiga|resumen|hazme|de|sobre|la|el|una|un|que es|quien es)\b",
-            " ", texto_lower
-        ).strip()
+        query = re.sub(r"\b(miku|busca|investiga|resumen|hazme|de|sobre|la|el|una|un|que es|quien es)\b", " ", texto_lower).strip()
         if query:
             try:
                 resultados = DDGS().text(query, max_results=num_fuentes)
@@ -789,24 +764,14 @@ def responder():
                 app.logger.warning(f"Error DDGS: {e}")
 
     mensajes_para_api.append({"role": "system", "content": instruccion_longitud})
-    mensajes_para_api.append({
-        "role": "system",
-        "content": "IMPORTANTE: Para hacer tu respuesta más visual, añade [IMG: palabras clave en inglés]. Usa máximo 2 imágenes."
-    })
+    mensajes_para_api.append({"role": "system", "content": "IMPORTANTE: Para hacer tu respuesta más visual, añade [IMG: palabras clave en inglés]. Usa máximo 2 imágenes."})
     mensajes_para_api.append({"role": "user", "content": mensaje})
 
     try:
-        completion = cliente.chat.completions.create(
-            model="openai/gpt-oss-120b",
-            messages=mensajes_para_api,
-            temperature=0.7,
-            max_tokens=max_tokens_respuesta
-        )
+        completion = cliente.chat.completions.create(model="openai/gpt-oss-120b", messages=mensajes_para_api, temperature=0.7, max_tokens=max_tokens_respuesta)
         respuesta_cruda = completion.choices[0].message.content
-
         patron = r'\[IMG:\s*(.*?)\]'
         partes = re.split(patron, respuesta_cruda)
-
         respuesta_final = ""
         for i, parte in enumerate(partes):
             if i % 2 == 0:
@@ -816,45 +781,25 @@ def responder():
                 imagenes = buscar_imagen_wikimedia(palabras_clave, limite=5)
                 if imagenes:
                     img = imagenes[0]
-                    tarjeta = (
-                        f'<div class="tarjeta-imagen">'
-                        f'<div class="titulo-imagen">📷 {img["nombre"]}</div>'
-                        f'<img src="{img["url"]}" alt="{palabras_clave}">'
-                        f'<div class="atribucion">Fuente: Wikimedia Commons | '
-                        f'Autor: {img["autor"]} | Licencia: {img["licencia"]}</div></div>'
-                    )
-                    respuesta_final += tarjeta + "\n"
-
+                    respuesta_final += f'<div class="tarjeta-imagen"><div class="titulo-imagen">📷 {img["nombre"]}</div><img src="{img["url"]}" alt="{palabras_clave}"><div class="atribucion">Fuente: Wikimedia Commons | Autor: {img["autor"]} | Licencia: {img["licencia"]}</div></div>\n'
         historial_chat.append({"role": "user", "content": mensaje})
         historial_chat.append({"role": "assistant", "content": respuesta_final})
         if len(historial_chat) > MAX_TURNOS * 2:
             historiales[user_id][hermana] = historial_chat[-MAX_TURNOS * 2:]
-
         return jsonify({"respuesta": respuesta_final})
-        
     except Exception as e:
         error_str = str(e).lower()
         app.logger.error(f"Error Groq: {e}")
+        global ERRORES_RECIENTES
+        ERRORES_RECIENTES.append({"hora": time.strftime("%H:%M:%S"), "error": str(e)})
+        ERRORES_RECIENTES = ERRORES_RECIENTES[-10:]
         
-        # ✅ Interceptar errores técnicos (API Key, cuota, red) con mensajes amigables y sin tecnicismos
+        # Si hay error, mandar notificación (Discord)
+        enviar_notificacion_admin(f"Error en el chat:\n`{str(e)}`")
+        
         if any(x in error_str for x in ["invalid api key", "invalid_api_key", "authentication", "unauthorized", "401", "api key", "quota", "rate limit", "429"]):
-            return jsonify({
-                "respuesta": (
-                    "🌸 <b>Vaya, parece que estamos teniendo problemas técnicos.</b> 💙<br><br>"
-                    "Nuestro equipo ya está trabajando para solucionarlo lo antes posible. "
-                    "Por favor, intenta de nuevo en unos minutos. ¡Gracias por tu paciencia! 🌸"
-                )
-            })
-        
-        # Cualquier otro error (red, timeout, etc.)
-        return jsonify({
-            "respuesta": (
-                "💙 <b>Lo siento mucho...</b><br><br>"
-                "Parece que hubo un pequeño problema de conexión al procesar tu mensaje. "
-                "A veces pasa cuando la señal está débil. ¿Podrías intentar de nuevo en un momentito? 💙🌸"
-            )
-        })
-
+            return jsonify({"respuesta": "🌸 <b>Vaya, parece que estamos teniendo problemas técnicos.</b> 💙<br><br>Nuestro equipo ya está trabajando para solucionarlo lo antes posible. Por favor, intenta de nuevo en unos minutos. ¡Gracias por tu paciencia! 🌸"})
+        return jsonify({"respuesta": "💙 <b>Lo siento mucho...</b><br><br>Parece que hubo un pequeño problema de conexión al procesar tu mensaje. A veces pasa cuando la señal está débil. ¿Podrías intentar de nuevo en un momentito? 💙🌸"})
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
