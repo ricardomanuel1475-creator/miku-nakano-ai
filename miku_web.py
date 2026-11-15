@@ -35,12 +35,11 @@ MANTENIMIENTO_ACTIVO = False
 ERRORES_RECIENTES = []
 REPORTES_USUARIOS = []
 
-# 🔔 PON AQUÍ TU URL DE WEBHOOK DE DISCORD PARA RECIBIR NOTIFICACIONES
-# (Si no pones nada, no mandará notificación pero guardará el error en el panel)
+# 🔔 TU ENLACE DE DISCORD
 DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1571557529820074076/_f2VBniGU6HcyOlsN3aPNrpjFdQTtFUl_Ga2DAYZx8bIKqGIDjwFA_u1kf5IkldQ50LP" 
 
 def enviar_notificacion_admin(mensaje):
-    """Envía una alerta al Discord del administrador (o solo la guarda)."""
+    """Envía una alerta al Discord del administrador."""
     if DISCORD_WEBHOOK_URL:
         try:
             requests.post(DISCORD_WEBHOOK_URL, json={"content": f"🚨 **ALERTA NAKANO IA**\n{mensaje}"}, timeout=5)
