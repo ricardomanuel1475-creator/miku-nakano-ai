@@ -39,12 +39,20 @@ REPORTES_USUARIOS = []
 DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1571557529820074076/_f2VBniGU6HcyOlsN3aPNrpjFdQTtFUl_Ga2DAYZx8bIKqGIDjwFA_u1kf5IkldQ50LP" 
 
 def enviar_notificacion_admin(mensaje):
-    """Envía una alerta al Discord del administrador."""
+    """Envía una alerta al Discord del administrador y reporta el estado en los Logs."""
     if DISCORD_WEBHOOK_URL:
         try:
-            requests.post(DISCORD_WEBHOOK_URL, json={"content": f"🚨 **ALERTA NAKANO IA**\n{mensaje}"}, timeout=5)
+            # Hacemos la petición y guardamos la respuesta
+            respuesta = requests.post(DISCORD_WEBHOOK_URL, json={"content": f"🚨 **ALERTA NAKANO IA**\n{mensaje}"}, timeout=5)
+            
+            # Si Discord responde con un error (ej. 404, 401), lo imprimimos en los logs
+            if respuesta.status_code not in [200, 204]:
+                print(f"❌ Error de Discord ({respuesta.status_code}): {respuesta.text}")
+            else:
+                print("✅ Notificación enviada a Discord con éxito.")
+                
         except Exception as e:
-            print(f"No se pudo enviar la notificación a Discord: {e}")
+            print(f"❌ Error de conexión con Discord: {e}")
 
 @app.after_request
 def add_header(response):
