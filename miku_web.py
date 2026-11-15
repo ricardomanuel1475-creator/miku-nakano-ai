@@ -2,7 +2,6 @@ from flask import Flask, render_template_string, request, jsonify, session, redi
 from werkzeug.middleware.proxy_fix import ProxyFix
 import os
 import re
-import requests
 import time
 from datetime import timedelta
 from groq import Groq
@@ -29,37 +28,10 @@ app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
 
 app.secret_key = os.environ.get('SECRET_KEY', 'MikuNakanoEsLaMejorAsistente2026')
 
-# ✅ ADMINISTRACIÓN Y NOTIFICACIONES
+# ✅ ADMINISTRACIÓN
 ADMIN_EMAIL = "ricardomanuel1475@gmail.com"
 MANTENIMIENTO_ACTIVO = False
-ERRORES_RECIENTES = []
 REPORTES_USUARIOS = []
-
-# 🔔 TU ENLACE DE DISCORD
-DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1571557529820074076/_f2VBniGU6HcyOlsN3aPNrpjFdQTtFUl_Ga2DAYZx8bIKqGIDjwFA_u1kf5IkldQ50LP" 
-
-def enviar_notificacion_admin(mensaje):
-    """Envía una alerta al Discord del administrador y guarda errores en el panel si falla."""
-    if DISCORD_WEBHOOK_URL:
-        try:
-            respuesta = requests.post(DISCORD_WEBHOOK_URL, json={"content": f"🚨 **ALERTA NAKANO IA**\n{mensaje}"}, timeout=5)
-            if respuesta.status_code not in [200, 204]:
-                global ERRORES_RECIENTES
-                ERRORES_RECIENTES.append({"hora": time.strftime("%H:%M:%S"), "error": f"Discord Error {respuesta.status_code}: {respuesta.text}"})
-                ERRORES_RECIENTES = ERRORES_RECIENTES[-10:]
-        except Exception as e:
-            global ERRORES_RECIENTES
-            ERRORES_RECIENTES.append({"hora": time.strftime("%H:%M:%S"), "error": f"Error de conexión: {str(e)}"})
-            ERRORES_RECIENTES = ERRORES_RECIENTES[-10:]
-
-@app.after_request
-def add_header(response):
-    if request.path.startswith('/static') or request.path in ('/sw.js', '/manifest.json', '/health'):
-        return response
-    response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, post-check=0, pre-check=0, max-age=0'
-    response.headers['Pragma'] = 'no-cache'
-    response.headers['Expires'] = '-1'
-    return response
 
 # ==========================================
 # GOOGLE OAUTH
@@ -133,6 +105,7 @@ def limpiar_texto(texto):
 
 def buscar_imagen_wikimedia(palabras_clave, limite=5):
     try:
+        import requests
         url = "https://commons.wikimedia.org/w/api.php"
         headers = {"User-Agent": "MikuNakanoAI/1.0 (https://miku-nakano-ai.onrender.com; contacto@ejemplo.com)"}
         params = {"action": "query", "generator": "search", "gsrsearch": palabras_clave, "gsrnamespace": "6", "gsrlimit": limite, "prop": "imageinfo", "iiprop": "url|extmetadata", "iiurlwidth": "800", "format": "json"}
@@ -323,7 +296,13 @@ HTML = r"""
             </div>
             <div style="display: flex; align-items: center; gap: 10px;">
                 {% if is_admin %}
-                <a href="/admin" style="text-decoration: none; font-size: 1.2rem; background: #e0f0ff; padding: 8px; border-radius: 50%; border: 1px solid #4aa3df;" title="Panel de Administrador">🛠️</a>
+                <!-- 🔔 LA CAMPANITA DE NOTIFICACIONES -->
+                <a href="/admin" style="text-decoration: none; font-size: 1.2rem; background: #e0f0ff; padding: 8px; border-radius: 50%; border: 1px solid #4aa3df; position: relative;" title="Panel de Administrador">
+                    🛠️
+                    {% if reportes_nuevos > 0 %}
+                    <span style="position: absolute; top: -5px; right: -5px; background: red; color: white; border-radius: 50%; padding: 2px 6px; font-size: 0.7rem; font-weight: bold;">{{ reportes_nuevos }}</span>
+                    {% endif %}
+                </a>
                 {% endif %}
                 <button class="switch-btn" onclick="abrirModalReporte()" style="background: #fff0f5; border-color: #ffb6c1; color: #d63384;" title="Reportar un problema">⚠️ Reportar</button>
                 <button class="switch-btn" onclick="abrirModal()">Cambiar Hermana</button>
@@ -628,7 +607,9 @@ def index():
         
     user_name = str(session['user'].get('name', 'Usuario'))
     is_admin = (session.get('user_id') == ADMIN_EMAIL)
-    return render_template_string(HTML, user_name=user_name, is_admin=is_admin)
+    # Calcular cuántos reportes hay para la campanita
+    reportes_nuevos = len(REPORTES_USUARIOS)
+    return render_template_string(HTML, user_name=user_name, is_admin=is_admin, reportes_nuevos=reportes_nuevos)
 
 @app.route('/login')
 def login():
@@ -665,9 +646,17 @@ def reportar():
     reporte = data.get('reporte', '')
     if reporte:
         global REPORTES_USUARIOS
-        REPORTES_USUARIOS.append({"usuario": session['user_id'], "hora": time.strftime("%H:%M:%S"), "texto": reporte})
-        REPORTES_USUARIOS = REPORTES_USUARIOS[-20:]
-        enviar_notificacion_admin(f"Reporte de Usuario:\n👤 {session['user_id']}\n📝 {reporte}")
+        tiempo_actual = time.time()
+        # Guardamos la hora actual (timestamp) para calcular luego
+        REPORTES_USUARIOS.append({"usuario": session['user_id'], "hora": time.strftime("%H:%M:%S"), "texto": reporte, "timestamp": tiempo_actual})
+        
+        # 🧹 LIMPIEZA AUTOMÁTICA: Borrar reportes de más de 7 días (604800 segundos)
+        # Si el reporte tiene más de 7 días de antigüedad, se elimina
+        REPORTES_USUARIOS = [r for r in REPORTES_USUARIOS if (tiempo_actual - r.get("timestamp", tiempo_actual)) < 604800]
+        
+        # Limitar a los últimos 50 reportes por si acaso
+        REPORTES_USUARIOS = REPORTES_USUARIOS[-50:]
+        
     return jsonify({"status": "ok"}), 200
 
 @app.route('/admin', methods=['GET'])
@@ -677,7 +666,6 @@ def admin_panel():
     
     status = "🔴 EN MANTENIMIENTO" if MANTENIMIENTO_ACTIVO else "🟢 ACTIVO"
     
-    errores_html = "".join([f"<li><b>{e['hora']}:</b> {e['error']}</li>" for e in ERRORES_RECIENTES]) or "<li>No hay errores recientes.</li>"
     reportes_html = "".join([f"<li style='margin-bottom:10px;'><b>{r['hora']} (por {r['usuario']}):</b><br>{r['texto']}</li>" for r in REPORTES_USUARIOS]) or "<li>No hay reportes de usuarios.</li>"
     
     return f"""
@@ -696,13 +684,8 @@ def admin_panel():
         </div>
 
         <div style="background: white; padding: 20px; border-radius: 10px; margin-top: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
-            <h3>Reportes de Usuarios</h3>
+            <h3>Reportes de Usuarios (Se borran a los 7 días)</h3>
             <ul style="color: #333; padding-left: 20px;">{reportes_html}</ul>
-        </div>
-
-        <div style="background: white; padding: 20px; border-radius: 10px; margin-top: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
-            <h3>Errores del Sistema (Backend)</h3>
-            <ul style="color: #cc0000; padding-left: 20px;">{errores_html}</ul>
         </div>
         
         <a href="/" style="display: inline-block; margin-top: 20px; color: #4aa3df; font-weight: bold;">← Volver al Chat</a>
@@ -796,12 +779,6 @@ def responder():
         error_str = str(e).lower()
         app.logger.error(f"Error Groq: {e}")
         global ERRORES_RECIENTES
-        ERRORES_RECIENTES.append({"hora": time.strftime("%H:%M:%S"), "error": str(e)})
-        ERRORES_RECIENTES = ERRORES_RECIENTES[-10:]
-        
-        # Si hay error, mandar notificación (Discord)
-        enviar_notificacion_admin(f"Error en el chat:\n`{str(e)}`")
-        
         if any(x in error_str for x in ["invalid api key", "invalid_api_key", "authentication", "unauthorized", "401", "api key", "quota", "rate limit", "429"]):
             return jsonify({"respuesta": "🌸 <b>Vaya, parece que estamos teniendo problemas técnicos.</b> 💙<br><br>Nuestro equipo ya está trabajando para solucionarlo lo antes posible. Por favor, intenta de nuevo en unos minutos. ¡Gracias por tu paciencia! 🌸"})
         return jsonify({"respuesta": "💙 <b>Lo siento mucho...</b><br><br>Parece que hubo un pequeño problema de conexión al procesar tu mensaje. A veces pasa cuando la señal está débil. ¿Podrías intentar de nuevo en un momentito? 💙🌸"})
