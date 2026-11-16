@@ -148,7 +148,6 @@ HTML = r"""
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#4aa3df">
     
-    <!-- ✅ ARREGLO: Precargar la imagen de carga para que aparezca al instante -->
     <link rel="preload" as="image" href="/static/carga.png" media="(orientation: portrait)">
     <link rel="preload" as="image" href="/static/carga_pc.png" media="(orientation: landscape)">
 
@@ -156,7 +155,6 @@ HTML = r"""
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: 'Segoe UI', Arial, sans-serif; background-color: #f0f7ff; display: flex; height: 100dvh; overflow: hidden; }
         
-        /* ✅ ARREGLO: La imagen ahora es fondo del contenedor para carga inmediata */
         #loading-screen { 
             position: fixed; top: 0; left: 0; width: 100%; height: 100dvh;
             background-color: #0f0f1a; 
@@ -711,12 +709,12 @@ def admin_panel():
             </a>
         </div>
 
-        <!-- NUEVO BOTÓN PARA IR AL CHAT DE MIKU DESARROLLADORA -->
+        <!-- NUEVO BOTÓN PARA IR AL CHAT DE MIKU ADMIN -->
         <div style="background: white; padding: 20px; border-radius: 10px; margin-top: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
             <h3>Chat Exclusivo de Programación</h3>
             <p style="font-size:0.9rem; color:#555;">Habla con Miku en modo programadora para que te ayude a crear códigos limpios y funcionales.</p>
             <a href="/admin/miku_dev" style="display: inline-block; padding: 10px 20px; background: #28a745; color: white; text-decoration: none; border-radius: 5px; font-weight: bold;">
-                💻 Entrar al Chat de Miku Desarrolladora
+                💻 Entrar al Chat de Miku Admin
             </a>
         </div>
 
@@ -739,13 +737,13 @@ def toggle_mantenimiento():
     return redirect('/admin')
 
 # ==========================================
-# RUTA Y LÓGICA DEL CHAT MIKU DESARROLLADORA (DISEÑO COMPLETO)
+# RUTA Y LÓGICA DEL CHAT MIKU ADMIN (DISEÑO COMPLETO)
 # ==========================================
 HTML_ADMIN_CHAT = r"""
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Miku Desarrolladora</title>
+    <title>Miku Admin</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -773,13 +771,13 @@ HTML_ADMIN_CHAT = r"""
         .main-chat { flex: 1; display: flex; flex-direction: column; background: #ffffff; position: relative; }
         .chat-header { padding: 20px; border-bottom: 1px solid #eee; color: #1b5e20; font-weight: bold; font-size: 1.2rem; display: flex; align-items: center; justify-content: space-between; background: #f1f8e9; }
         #chat { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 15px; }
-        .mensaje { max-width: 85%; padding: 12px 16px; border-radius: 15px; line-height: 1.5; font-size: 0.95rem; white-space: pre-wrap; }
+        .mensaje { max-width: 85%; padding: 12px 16px; border-radius: 15px; line-height: 1.5; font-size: 0.95rem; white-space: pre-wrap; font-family: 'Segoe UI', Arial, sans-serif; }
         .mensaje-usuario { align-self: flex-end; background: #28a745; color: white; border-bottom-right-radius: 2px; }
-        .mensaje-miku { align-self: flex-start; background: #f1f8e9; color: #1b3a4b; border-bottom-left-radius: 2px; border: 1px solid #c3e6cb; font-family: 'Courier New', Courier, monospace; }
-        .mensaje-miku b { color: #1b5e20; font-family: 'Segoe UI', Arial, sans-serif;}
+        .mensaje-miku { align-self: flex-start; background: #f1f8e9; color: #1b3a4b; border-bottom-left-radius: 2px; border: 1px solid #c3e6cb; }
+        .mensaje-miku b { color: #1b5e20; }
         
         /* Formato para bloques de código */
-        pre { background: #2b2b2b; color: #f8f8f2; padding: 10px; border-radius: 5px; overflow-x: auto; margin-top: 5px; margin-bottom: 5px; }
+        pre { background: #2b2b2b; color: #f8f8f2; padding: 10px; border-radius: 5px; overflow-x: auto; margin-top: 5px; margin-bottom: 5px; font-family: 'Courier New', Courier, monospace; }
 
         .input-area { padding: 15px; padding-bottom: 25px; border-top: 1px solid #eee; display: flex; gap: 10px; background: #fafafa; }
         input { flex: 1; padding: 15px; border-radius: 30px; border: 1px solid #ddd; outline: none; font-size: 1rem; }
@@ -798,8 +796,8 @@ HTML_ADMIN_CHAT = r"""
 <body>
     <div class="sidebar">
         <div class="profile-header">
-            <img src="/static/miku.webp" alt="Miku Dev">
-            <h2>Miku Dev 💻</h2>
+            <img src="/static/miku.webp" alt="Miku Admin">
+            <h2>Miku Admin 💻</h2>
         </div>
         <div class="history-section">
             <div class="history-title">Mis Proyectos</div>
@@ -810,11 +808,11 @@ HTML_ADMIN_CHAT = r"""
 
     <div class="main-chat">
         <div class="chat-header">
-            <span>💻 Miku Desarrolladora (Modo Admin)</span>
+            <span>💻 Miku Admin (Modo Admin)</span>
             <a href="/admin" class="btn-back">← Volver al Panel</a>
         </div>
         <div id="chat">
-            <div class="mensaje mensaje-miku"><b>Miku Dev:</b> ¡Hola, Creador! 💙 Estoy lista para programar contigo. Pídeme cualquier función, script o código y te lo daré limpio y listo para usar. ¿Qué vamos a crear hoy?</div>
+            <div class="mensaje mensaje-miku"><b>Miku Admin:</b> ¡Hola, Creador! 💙 Estoy lista para programar contigo. Pídeme cualquier función, script o código y te lo daré limpio y listo para usar. ¿Qué vamos a crear hoy?</div>
         </div>
         <div class="input-area">
             <input type="text" id="mensaje" placeholder="Pídeme un código..." onkeypress="if(event.key === 'Enter') enviarDev()">
@@ -825,6 +823,15 @@ HTML_ADMIN_CHAT = r"""
     <script>
         function escapeHtml(s) {
             return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[c]));
+        }
+
+        function copiarCodigo(idElemento) {
+            const texto = document.getElementById(idElemento).innerText;
+            navigator.clipboard.writeText(texto).then(() => {
+                alert("¡Código copiado al portapapeles! 💙");
+            }).catch(err => {
+                alert("Hubo un error al copiar el código.");
+            });
         }
 
         // Historial exclusivo para el admin
@@ -862,7 +869,7 @@ HTML_ADMIN_CHAT = r"""
 
         function nuevoChatDev() {
             currentChatId = Date.now().toString();
-            document.getElementById('chat').innerHTML = `<div class="mensaje mensaje-miku"><b>Miku Dev:</b> ¡Hola, Creador! 💙 Estoy lista para programar contigo. Pídeme cualquier función, script o código y te lo daré limpio y listo para usar. ¿Qué vamos a crear hoy?</div>`;
+            document.getElementById('chat').innerHTML = `<div class="mensaje mensaje-miku"><b>Miku Admin:</b> ¡Hola, Creador! 💙 Estoy lista para programar contigo. Pídeme cualquier función, script o código y te lo daré limpio y listo para usar. ¿Qué vamos a crear hoy?</div>`;
         }
 
         function cargarChat(id) {
@@ -871,7 +878,7 @@ HTML_ADMIN_CHAT = r"""
                 if (msg.role === 'user') {
                     chatDiv.innerHTML += `<div class="mensaje mensaje-usuario"><b>Tú:</b> ${escapeHtml(msg.texto)}</div>`;
                 } else {
-                    chatDiv.innerHTML += `<div class="mensaje mensaje-miku"><b>Miku Dev:</b><br><br>${msg.html}</div>`;
+                    chatDiv.innerHTML += `<div class="mensaje mensaje-miku"><b>Miku Admin:</b><br><br>${msg.html}</div>`;
                 }
             });
             chatDiv.scrollTop = chatDiv.scrollHeight;
@@ -891,7 +898,7 @@ HTML_ADMIN_CHAT = r"""
             chatDiv.scrollTop = chatDiv.scrollHeight;
 
             const idPensando = 'pensando-' + Date.now();
-            chatDiv.innerHTML += `<div class="mensaje mensaje-miku" id="${idPensando}"><b>Miku Dev:</b> Escribiendo código... ⌨️</div>`;
+            chatDiv.innerHTML += `<div class="mensaje mensaje-miku" id="${idPensando}"><b>Miku Admin:</b> Escribiendo código... ⌨️</div>`;
             chatDiv.scrollTop = chatDiv.scrollHeight;
             guardarChats();
 
@@ -903,16 +910,25 @@ HTML_ADMIN_CHAT = r"""
                 });
                 const data = await response.json();
                 
-                // Formatear código para que se vea bonito
+                // Formatear código y añadir botón de copiar
                 let respuestaHTML = data.respuesta;
-                respuestaHTML = respuestaHTML.replace(/```(.*?)```/gs, '<pre><code>$1</code></pre>');
+                respuestaHTML = respuestaHTML.replace(/```(.*?)```/gs, (match, codigo) => {
+                    const idBoton = 'copiar-' + Math.floor(Math.random() * 100000);
+                    const codigoSeguro = codigo.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                    return `
+                        <div style="position: relative; margin: 10px 0;">
+                            <button onclick="copiarCodigo('${idBoton}')" style="position: absolute; top: 5px; right: 5px; background: #28a745; color: white; border: none; padding: 5px 10px; border-radius: 5px; cursor: pointer; font-size: 0.8rem; z-index: 10;">📋 Copiar</button>
+                            <pre style="margin: 0; padding-top: 35px; background: #2b2b2b; color: #f8f8f2; border-radius: 5px; overflow-x: auto;"><code id="${idBoton}">${codigoSeguro}</code></pre>
+                        </div>
+                    `;
+                });
                 
-                document.getElementById(idPensando).innerHTML = `<b>Miku Dev:</b><br><br>${respuestaHTML}`;
+                document.getElementById(idPensando).innerHTML = `<b>Miku Admin:</b><br><br>${respuestaHTML}`;
                 chatDiv.scrollTop = chatDiv.scrollHeight;
                 chats[currentChatId].push({ role: 'miku', html: respuestaHTML });
                 guardarChats();
             } catch (e) {
-                document.getElementById(idPensando).innerHTML = `<b>Miku Dev:</b> Error de conexión. 💙`;
+                document.getElementById(idPensando).innerHTML = `<b>Miku Admin:</b> Error de conexión. 💙`;
             }
         }
 
