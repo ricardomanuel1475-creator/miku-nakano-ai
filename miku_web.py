@@ -98,7 +98,6 @@ def es_contenido_inapropiado(texto):
     return any(palabra in t for palabra in palabras_bloqueadas)
 
 def es_peticion_de_codigo(texto):
-    # Detecta si el usuario está pidiendo programar algo
     palabras_clave = ["python", "html", "css", "javascript", "java", "c++", "codigo", "código", "programa", "script", "funcion", "función", "app", "aplicacion", "aplicación", "bot", "web", "pagina", "página", "api", "base de datos", "sql"]
     t = texto.lower()
     return any(palabra in t for palabra in palabras_clave)
@@ -148,12 +147,32 @@ HTML = r"""
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#4aa3df">
+    
+    <!-- ✅ ARREGLO: Precargar la imagen de carga para que aparezca al instante -->
+    <link rel="preload" as="image" href="/static/carga.png" media="(orientation: portrait)">
+    <link rel="preload" as="image" href="/static/carga_pc.png" media="(orientation: landscape)">
+
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: 'Segoe UI', Arial, sans-serif; background-color: #f0f7ff; display: flex; height: 100dvh; overflow: hidden; }
-        #loading-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100dvh; background-color: #0f0f1a; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 9999; transition: opacity 0.8s ease; }
+        
+        /* ✅ ARREGLO: La imagen ahora es fondo del contenedor para carga inmediata */
+        #loading-screen { 
+            position: fixed; top: 0; left: 0; width: 100%; height: 100dvh;
+            background-color: #0f0f1a; 
+            background-image: url('/static/carga.png');
+            background-size: cover;
+            background-position: center;
+            display: flex; flex-direction: column; align-items: center; justify-content: center; 
+            z-index: 9999; transition: opacity 0.8s ease; 
+        }
+        
+        @media (orientation: landscape) {
+            #loading-screen { background-image: url('/static/carga_pc.png'); }
+        }
+
         #loading-screen.hidden { opacity: 0; pointer-events: none; }
-        .loading-image { width: 100%; height: 100%; object-fit: cover; position: absolute; top: 0; left: 0; }
+        
         .petalos-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; overflow: hidden; pointer-events: none; z-index: 1; }
         .petalo { position: absolute; top: -10%; width: 15px; height: 15px; background-color: #ffb7c5; border-radius: 15px 0 15px 0; opacity: 0.8; animation: caer linear infinite; }
         .petalo:nth-child(1) { left: 10%; animation-duration: 8s; animation-delay: 0s; width: 12px; height: 12px; }
@@ -165,10 +184,16 @@ HTML = r"""
         .petalo:nth-child(7) { left: 50%; animation-duration: 6s; animation-delay: 6s; width: 8px; height: 8px; }
         .petalo:nth-child(8) { left: 95%; animation-duration: 13s; animation-delay: 2s; width: 15px; height: 15px; }
         @keyframes caer { 0% { transform: translateY(0) rotate(0deg) translateX(0); opacity: 0; } 10% { opacity: 0.9; } 50% { transform: translateY(50vh) rotate(180deg) translateX(20px); } 90% { opacity: 0.9; } 100% { transform: translateY(110vh) rotate(360deg) translateX(-20px); opacity: 0; } }
+        
         .barra-carga-container { position: absolute; bottom: 4%; width: 60%; max-width: 400px; height: 15px; background-color: rgba(255, 255, 255, 0.1); border-radius: 20px; border: 2px solid #4aa3df; overflow: hidden; box-shadow: 0 0 15px #4aa3df; z-index: 2; }
         .barra-carga { width: 0%; height: 100%; background: linear-gradient(90deg, #00d2ff, #fff, #00d2ff); background-size: 200% 100%; border-radius: 20px; transition: width 0.5s ease-in-out; }
         .texto-porcentaje { position: absolute; bottom: 8%; color: white; font-weight: bold; font-size: 1.2rem; text-shadow: 0 0 5px #000, 0 0 10px #4aa3df; z-index: 3; }
-        @media (orientation: landscape) { .loading-image { content: url('/static/carga_pc.png'); } .barra-carga-container { bottom: 2%; } .texto-porcentaje { bottom: 6%; } }
+        
+        @media (orientation: landscape) {
+            .barra-carga-container { bottom: 2%; }
+            .texto-porcentaje { bottom: 6%; }
+        }
+        
         .sidebar { width: 320px; background: linear-gradient(180deg, #dff5ff 0%, #b3e0ff 100%); display: flex; flex-direction: column; padding: 15px; border-right: 2px solid #b3d9ff; flex-shrink: 0; overflow: hidden; transition: transform 0.3s ease; }
         .profile-header { display: flex; flex-direction: column; align-items: center; padding-bottom: 15px; border-bottom: 1px solid #a0d0ff; margin-bottom: 15px; flex-shrink: 0; }
         .profile-header img { width: 180px; height: 180px; object-fit: cover; border-radius: 25px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); border: 4px solid #fff; }
@@ -233,7 +258,6 @@ HTML = r"""
             <div class="petalo"></div><div class="petalo"></div><div class="petalo"></div>
             <div class="petalo"></div><div class="petalo"></div>
         </div>
-        <img src="/static/carga.png" alt="Cargando..." class="loading-image">
         <div class="texto-porcentaje" id="texto-porcentaje">0%</div>
         <div class="barra-carga-container">
             <div class="barra-carga" id="mi-barra"></div>
