@@ -184,7 +184,7 @@ HTML = r"""
         @keyframes caer { 0% { transform: translateY(0) rotate(0deg) translateX(0); opacity: 0; } 10% { opacity: 0.9; } 50% { transform: translateY(50vh) rotate(180deg) translateX(20px); } 90% { opacity: 0.9; } 100% { transform: translateY(110vh) rotate(360deg) translateX(-20px); opacity: 0; } }
         
         .barra-carga-container { position: absolute; bottom: 4%; width: 60%; max-width: 400px; height: 15px; background-color: rgba(255, 255, 255, 0.1); border-radius: 20px; border: 2px solid #4aa3df; overflow: hidden; box-shadow: 0 0 15px #4aa3df; z-index: 2; }
-        .barra-carga { width: 0%; height: 100%; background: linear-gradient(90deg, #00d2ff, #fff, #00d2ff); background-size: 200% 100%; border-radius: 20px; transition: width 0.5s ease-in-out; }
+        .barra-carga { width: 0%; height: 100%; background: linear-gradient(90deg, #00d2ff, #fff, #00d2ff); background-size: 200% 100%; border-radius: 20px; transition: width 0.1s linear; }
         .texto-porcentaje { position: absolute; bottom: 8%; color: white; font-weight: bold; font-size: 1.2rem; text-shadow: 0 0 5px #000, 0 0 10px #4aa3df; z-index: 3; }
         
         @media (orientation: landscape) {
@@ -358,31 +358,29 @@ HTML = r"""
         const barra = document.getElementById('mi-barra');
         const textoPorcentaje = document.getElementById('texto-porcentaje');
         let progreso = 0;
-        let cargando = true;
+        
+        // ✅ LÓGICA DE CARGA SINCRONIZADA A 15 SEGUNDOS
+        const duracionCarga = 15000; // 15 segundos en milisegundos
+        const intervaloProgreso = 100; // Actualizar cada 100ms
+        const pasosTotales = duracionCarga / intervaloProgreso;
+        const incremento = 100 / pasosTotales;
 
         const intervalo = setInterval(() => {
-            if (cargando && progreso < 90) {
-                progreso += 1;
+            if (progreso < 100) {
+                progreso += incremento;
+                if (progreso > 99.9) progreso = 100;
+                
                 barra.style.width = progreso + '%';
-                textoPorcentaje.innerText = progreso + '%';
+                textoPorcentaje.innerText = Math.floor(progreso) + '%';
+            } else {
+                clearInterval(intervalo);
+                // Ya llegó al 100%, ahora esperamos a que termine el tiempo para quitar la pantalla
+                setTimeout(() => {
+                    const loader = document.getElementById('loading-screen');
+                    if(loader) loader.classList.add('hidden');
+                }, 500); // Medio segundo extra al 100% para que se vea bonito
             }
-        }, 100);
-
-        // ✅ FIX: La imagen ahora se ve obligatoriamente por 20 segundos completos
-        window.addEventListener('load', () => {
-            cargando = false;
-            clearInterval(intervalo);
-            
-            // Forzar a la barra a llegar al 100%
-            barra.style.width = '100%';
-            textoPorcentaje.innerText = '100%';
-
-            // Ocultar la pantalla de carga después de 20 segundos
-            setTimeout(() => {
-                const loader = document.getElementById('loading-screen');
-                if(loader) loader.classList.add('hidden');
-            }, 20000); // 20,000 ms = 20 segundos
-        });
+        }, intervaloProgreso);
 
         const saludos = {
             "Ichika": "¡Hola! 💙 Soy Ichika. Me alegra mucho verte. ¿En qué te gustaría que te ayudara hoy?",
