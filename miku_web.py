@@ -739,7 +739,7 @@ def toggle_mantenimiento():
     return redirect('/admin')
 
 # ==========================================
-# RUTA Y LÓGICA DEL CHAT MIKU DESARROLLADORA
+# RUTA Y LÓGICA DEL CHAT MIKU DESARROLLADORA (DISEÑO COMPLETO)
 # ==========================================
 HTML_ADMIN_CHAT = r"""
 <!DOCTYPE html>
@@ -748,35 +748,133 @@ HTML_ADMIN_CHAT = r"""
     <title>Miku Desarrolladora</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
-        body { font-family: 'Segoe UI', Arial, sans-serif; background-color: #f0f7ff; display: flex; flex-direction: column; height: 100dvh; overflow: hidden; margin: 0; }
-        .header { background: #28a745; color: white; padding: 15px; display: flex; justify-content: space-between; align-items: center; font-weight: bold; }
-        .header a { color: white; text-decoration: none; font-size: 0.9rem; background: rgba(0,0,0,0.2); padding: 5px 10px; border-radius: 5px; }
-        #chat { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 15px; background: #ffffff; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Segoe UI', Arial, sans-serif; background-color: #e8f5e9; display: flex; height: 100dvh; overflow: hidden; }
+        
+        /* Barra lateral verde */
+        .sidebar { width: 320px; background: linear-gradient(180deg, #d4edda 0%, #a3d9a5 100%); display: flex; flex-direction: column; padding: 15px; border-right: 2px solid #8bc34a; flex-shrink: 0; overflow: hidden; }
+        .profile-header { display: flex; flex-direction: column; align-items: center; padding-bottom: 15px; border-bottom: 1px solid #8bc34a; margin-bottom: 15px; flex-shrink: 0; }
+        .profile-header img { width: 180px; height: 180px; object-fit: cover; border-radius: 25px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); border: 4px solid #fff; }
+        .profile-header h2 { margin-top: 12px; color: #1b5e20; font-size: 1.4rem; text-align: center; }
+        .history-section { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+        .history-title { font-size: 0.9rem; font-weight: bold; color: #1b5e20; margin-bottom: 10px; }
+        .new-chat-btn { background: #28a745; color: white; border: none; padding: 10px 12px; border-radius: 8px; cursor: pointer; font-size: 0.85rem; width: 100%; margin-bottom: 10px; font-weight: bold; transition: 0.3s; }
+        .new-chat-btn:hover { background: #1e7e34; }
+        #historyList { overflow-y: auto; flex: 1; padding-right: 5px; }
+        .chat-history-item { display: flex; justify-content: space-between; align-items: center; padding: 10px; border-radius: 8px; margin-bottom: 5px; cursor: pointer; font-size: 0.85rem; color: #333; background: #fff; border: 1px solid #c3e6cb; transition: 0.2s; }
+        .chat-history-item:hover { background: #d4edda; color: #1b5e20; border-color: #28a745; }
+        .chat-history-item span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; }
+        .delete-btn { display: none; background: transparent; border: none; color: #ff4d4d; cursor: pointer; font-size: 1rem; padding: 0 5px; }
+        .chat-history-item:hover .delete-btn { display: block; }
+        #historyList::-webkit-scrollbar { width: 5px; }
+        #historyList::-webkit-scrollbar-thumb { background: #a3d9a5; border-radius: 5px; }
+        
+        /* Chat principal */
+        .main-chat { flex: 1; display: flex; flex-direction: column; background: #ffffff; position: relative; }
+        .chat-header { padding: 20px; border-bottom: 1px solid #eee; color: #1b5e20; font-weight: bold; font-size: 1.2rem; display: flex; align-items: center; justify-content: space-between; background: #f1f8e9; }
+        #chat { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 15px; }
         .mensaje { max-width: 85%; padding: 12px 16px; border-radius: 15px; line-height: 1.5; font-size: 0.95rem; white-space: pre-wrap; }
         .mensaje-usuario { align-self: flex-end; background: #28a745; color: white; border-bottom-right-radius: 2px; }
-        .mensaje-miku { align-self: flex-start; background: #f8f9fa; color: #1b3a4b; border-bottom-left-radius: 2px; border: 1px solid #ddd; font-family: 'Courier New', Courier, monospace; }
-        .mensaje-miku b { color: #28a745; font-family: 'Segoe UI', Arial, sans-serif;}
+        .mensaje-miku { align-self: flex-start; background: #f1f8e9; color: #1b3a4b; border-bottom-left-radius: 2px; border: 1px solid #c3e6cb; font-family: 'Courier New', Courier, monospace; }
+        .mensaje-miku b { color: #1b5e20; font-family: 'Segoe UI', Arial, sans-serif;}
+        
+        /* Formato para bloques de código */
+        pre { background: #2b2b2b; color: #f8f8f2; padding: 10px; border-radius: 5px; overflow-x: auto; margin-top: 5px; margin-bottom: 5px; }
+
         .input-area { padding: 15px; padding-bottom: 25px; border-top: 1px solid #eee; display: flex; gap: 10px; background: #fafafa; }
         input { flex: 1; padding: 15px; border-radius: 30px; border: 1px solid #ddd; outline: none; font-size: 1rem; }
+        input:focus { border-color: #28a745; box-shadow: 0 0 0 3px rgba(40, 167, 69, 0.2); }
         button.send-btn { padding: 15px 30px; background: #28a745; color: white; border: none; border-radius: 30px; cursor: pointer; font-weight: bold; }
+        button.send-btn:hover { background: #1e7e34; }
+        
+        .btn-back { text-decoration: none; font-size: 0.9rem; background: #e0f0ff; color: #1b5e20; padding: 8px 12px; border-radius: 5px; font-weight: bold; border: 1px solid #28a745; }
+        
+        @media (max-width: 768px) {
+            .sidebar { display: none; } /* En móviles se oculta la barra para dar espacio al chat */
+            .menu-btn { display: block; }
+        }
     </style>
 </head>
 <body>
-    <div class="header">
-        <span>💻 Miku Desarrolladora (Modo Admin)</span>
-        <a href="/admin">Volver al Panel</a>
+    <div class="sidebar">
+        <div class="profile-header">
+            <img src="/static/miku.webp" alt="Miku Dev">
+            <h2>Miku Dev 💻</h2>
+        </div>
+        <div class="history-section">
+            <div class="history-title">Mis Proyectos</div>
+            <button class="new-chat-btn" onclick="nuevoChatDev()">+ Nuevo Proyecto</button>
+            <div id="historyList"></div>
+        </div>
     </div>
-    <div id="chat">
-        <div class="mensaje mensaje-miku"><b>Miku Dev:</b> ¡Hola, Creador! 💙 Estoy lista para programar contigo. Pídeme cualquier función, script o código y te lo daré limpio y listo para usar. ¿Qué vamos a crear hoy?</div>
-    </div>
-    <div class="input-area">
-        <input type="text" id="mensaje" placeholder="Pídeme un código..." onkeypress="if(event.key === 'Enter') enviarDev()">
-        <button class="send-btn" onclick="enviarDev()">Enviar</button>
+
+    <div class="main-chat">
+        <div class="chat-header">
+            <span>💻 Miku Desarrolladora (Modo Admin)</span>
+            <a href="/admin" class="btn-back">← Volver al Panel</a>
+        </div>
+        <div id="chat">
+            <div class="mensaje mensaje-miku"><b>Miku Dev:</b> ¡Hola, Creador! 💙 Estoy lista para programar contigo. Pídeme cualquier función, script o código y te lo daré limpio y listo para usar. ¿Qué vamos a crear hoy?</div>
+        </div>
+        <div class="input-area">
+            <input type="text" id="mensaje" placeholder="Pídeme un código..." onkeypress="if(event.key === 'Enter') enviarDev()">
+            <button class="send-btn" onclick="enviarDev()">Enviar</button>
+        </div>
     </div>
 
     <script>
         function escapeHtml(s) {
             return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[c]));
+        }
+
+        // Historial exclusivo para el admin
+        let currentChatId = Date.now().toString();
+        let chats = JSON.parse(localStorage.getItem('miku_dev_chats')) || {};
+
+        function guardarChats() {
+            localStorage.setItem('miku_dev_chats', JSON.stringify(chats));
+            renderizarHistorial();
+        }
+
+        function renderizarHistorial() {
+            const list = document.getElementById('historyList'); list.innerHTML = '';
+            const chatIds = Object.keys(chats).sort((a, b) => b - a);
+            chatIds.forEach(id => {
+                const chat = chats[id];
+                if(chat && chat.length > 0) {
+                    const div = document.createElement('div'); div.className = 'chat-history-item';
+                    const span = document.createElement('span');
+                    span.innerText = chat[0].texto;
+                    span.onclick = () => { cargarChat(id); };
+                    const btn = document.createElement('button'); btn.className = 'delete-btn'; btn.innerHTML = '🗑️';
+                    btn.onclick = (e) => {
+                        e.stopPropagation();
+                        if(confirm('¿Eliminar este proyecto?')) { 
+                            delete chats[id]; 
+                            guardarChats(); 
+                            if (currentChatId === id) nuevoChatDev(); 
+                        }
+                    };
+                    div.appendChild(span); div.appendChild(btn); list.appendChild(div);
+                }
+            });
+        }
+
+        function nuevoChatDev() {
+            currentChatId = Date.now().toString();
+            document.getElementById('chat').innerHTML = `<div class="mensaje mensaje-miku"><b>Miku Dev:</b> ¡Hola, Creador! 💙 Estoy lista para programar contigo. Pídeme cualquier función, script o código y te lo daré limpio y listo para usar. ¿Qué vamos a crear hoy?</div>`;
+        }
+
+        function cargarChat(id) {
+            currentChatId = id; const chat = chats[id]; const chatDiv = document.getElementById('chat'); chatDiv.innerHTML = '';
+            chat.forEach(msg => {
+                if (msg.role === 'user') {
+                    chatDiv.innerHTML += `<div class="mensaje mensaje-usuario"><b>Tú:</b> ${escapeHtml(msg.texto)}</div>`;
+                } else {
+                    chatDiv.innerHTML += `<div class="mensaje mensaje-miku"><b>Miku Dev:</b><br><br>${msg.html}</div>`;
+                }
+            });
+            chatDiv.scrollTop = chatDiv.scrollHeight;
         }
 
         async function enviarDev() {
@@ -785,6 +883,9 @@ HTML_ADMIN_CHAT = r"""
             const mensaje = input.value.trim();
             if (!mensaje) return;
 
+            if (!chats[currentChatId]) chats[currentChatId] = [];
+            chats[currentChatId].push({ role: 'user', texto: mensaje });
+
             chatDiv.innerHTML += `<div class="mensaje mensaje-usuario"><b>Tú:</b> ${escapeHtml(mensaje)}</div>`;
             input.value = '';
             chatDiv.scrollTop = chatDiv.scrollHeight;
@@ -792,6 +893,7 @@ HTML_ADMIN_CHAT = r"""
             const idPensando = 'pensando-' + Date.now();
             chatDiv.innerHTML += `<div class="mensaje mensaje-miku" id="${idPensando}"><b>Miku Dev:</b> Escribiendo código... ⌨️</div>`;
             chatDiv.scrollTop = chatDiv.scrollHeight;
+            guardarChats();
 
             try {
                 const response = await fetch('/admin/responder_dev', {
@@ -803,14 +905,18 @@ HTML_ADMIN_CHAT = r"""
                 
                 // Formatear código para que se vea bonito
                 let respuestaHTML = data.respuesta;
-                respuestaHTML = respuestaHTML.replace(/```(.*?)```/gs, '<pre style="background:#2b2b2b; color:#f8f8f2; padding:10px; border-radius:5px; overflow-x:auto;"><code>$1</code></pre>');
+                respuestaHTML = respuestaHTML.replace(/```(.*?)```/gs, '<pre><code>$1</code></pre>');
                 
                 document.getElementById(idPensando).innerHTML = `<b>Miku Dev:</b><br><br>${respuestaHTML}`;
                 chatDiv.scrollTop = chatDiv.scrollHeight;
+                chats[currentChatId].push({ role: 'miku', html: respuestaHTML });
+                guardarChats();
             } catch (e) {
                 document.getElementById(idPensando).innerHTML = `<b>Miku Dev:</b> Error de conexión. 💙`;
             }
         }
+
+        renderizarHistorial();
     </script>
 </body>
 </html>
