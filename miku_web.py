@@ -53,7 +53,7 @@ GROQ_API_KEY = os.environ.get('GROQ_API_KEY', "gsk_hlrXK1x7kHbswJyIYuccWGdyb3FYs
 cliente = Groq(api_key=GROQ_API_KEY)
 
 # ==========================================
-# LISTAS BLANCAS
+# LISTAS BLANCAS Y PROMPTS
 # ==========================================
 HERMANAS_VALIDAS = {"Ichika", "Nino", "Miku", "Yotsuba", "Itsuki"}
 
@@ -74,7 +74,7 @@ ESPECIALIDADES = {
 }
 
 # ==========================================
-# 🛡️ FILTROS DE SEGURIDAD
+# 🛡️ FILTROS DE SEGURIDAD Y LÓGICA DE CÓDIGO
 # ==========================================
 def normalizar_texto(texto):
     texto = texto.lower()
@@ -96,6 +96,12 @@ def es_contenido_inapropiado(texto):
     palabras_bloqueadas = ["porno", "pornografia", "xxx", "contenido adulto", "onlyfans", "sexo explicito", "desnudos", "hentai", "erotico", "como matar a", "drogas ilegales", "como fabricar explosivos", "cocaina", "marihuana ilegal", "violencia extrema", "gore", "snuff", "como hackear", "robar tarjetas"]
     t = normalizar_texto(texto)
     return any(palabra in t for palabra in palabras_bloqueadas)
+
+def es_peticion_de_codigo(texto):
+    # Detecta si el usuario está pidiendo programar algo
+    palabras_clave = ["python", "html", "css", "javascript", "java", "c++", "codigo", "código", "programa", "script", "funcion", "función", "app", "aplicacion", "aplicación", "bot", "web", "pagina", "página", "api", "base de datos", "sql"]
+    t = texto.lower()
+    return any(palabra in t for palabra in palabras_clave)
 
 def limpiar_texto(texto):
     texto = re.sub(r'[*#|]', '', texto)
@@ -585,6 +591,9 @@ HTML = r"""
 </html>
 """
 
+# ==========================================
+# VISTAS Y RUTAS
+# ==========================================
 @app.route('/')
 def index():
     if 'user' not in session:
@@ -607,7 +616,6 @@ def index():
         
     user_name = str(session['user'].get('name', 'Usuario'))
     is_admin = (session.get('user_id') == ADMIN_EMAIL)
-    # Calcular cuántos reportes hay para la campanita
     reportes_nuevos = len(REPORTES_USUARIOS)
     return render_template_string(HTML, user_name=user_name, is_admin=is_admin, reportes_nuevos=reportes_nuevos)
 
@@ -647,25 +655,21 @@ def reportar():
     if reporte:
         global REPORTES_USUARIOS
         tiempo_actual = time.time()
-        # Guardamos la hora actual (timestamp) para calcular luego
         REPORTES_USUARIOS.append({"usuario": session['user_id'], "hora": time.strftime("%H:%M:%S"), "texto": reporte, "timestamp": tiempo_actual})
-        
-        # 🧹 LIMPIEZA AUTOMÁTICA: Borrar reportes de más de 7 días (604800 segundos)
-        # Si el reporte tiene más de 7 días de antigüedad, se elimina
+        # Limpieza automática (7 días)
         REPORTES_USUARIOS = [r for r in REPORTES_USUARIOS if (tiempo_actual - r.get("timestamp", tiempo_actual)) < 604800]
-        
-        # Limitar a los últimos 50 reportes por si acaso
         REPORTES_USUARIOS = REPORTES_USUARIOS[-50:]
-        
     return jsonify({"status": "ok"}), 200
 
+# ==========================================
+# RUTA DEL PANEL DE ADMIN
+# ==========================================
 @app.route('/admin', methods=['GET'])
 def admin_panel():
     if 'user_id' not in session or session['user_id'] != ADMIN_EMAIL:
         return "Acceso denegado.", 403
     
     status = "🔴 EN MANTENIMIENTO" if MANTENIMIENTO_ACTIVO else "🟢 ACTIVO"
-    
     reportes_html = "".join([f"<li style='margin-bottom:10px;'><b>{r['hora']} (por {r['usuario']}):</b><br>{r['texto']}</li>" for r in REPORTES_USUARIOS]) or "<li>No hay reportes de usuarios.</li>"
     
     return f"""
@@ -680,6 +684,15 @@ def admin_panel():
             <p style="font-size:0.9rem; color:#555;">Si activas el mantenimiento, la app se cerrará para los usuarios, pero tú podrás seguir navegando.</p>
             <a href="/toggle_mantenimiento" style="display: inline-block; padding: 10px 20px; background: {'#ff4d4d' if MANTENIMIENTO_ACTIVO else '#4aa3df'}; color: white; text-decoration: none; border-radius: 5px; font-weight: bold;">
                 {'Desactivar Mantenimiento' if MANTENIMIENTO_ACTIVO else 'Activar Mantenimiento'}
+            </a>
+        </div>
+
+        <!-- NUEVO BOTÓN PARA IR AL CHAT DE MIKU DESARROLLADORA -->
+        <div style="background: white; padding: 20px; border-radius: 10px; margin-top: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
+            <h3>Chat Exclusivo de Programación</h3>
+            <p style="font-size:0.9rem; color:#555;">Habla con Miku en modo programadora para que te ayude a crear códigos limpios y funcionales.</p>
+            <a href="/admin/miku_dev" style="display: inline-block; padding: 10px 20px; background: #28a745; color: white; text-decoration: none; border-radius: 5px; font-weight: bold;">
+                💻 Entrar al Chat de Miku Desarrolladora
             </a>
         </div>
 
@@ -701,6 +714,124 @@ def toggle_mantenimiento():
     MANTENIMIENTO_ACTIVO = not MANTENIMIENTO_ACTIVO
     return redirect('/admin')
 
+# ==========================================
+# RUTA Y LÓGICA DEL CHAT MIKU DESARROLLADORA
+# ==========================================
+HTML_ADMIN_CHAT = r"""
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Miku Desarrolladora</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body { font-family: 'Segoe UI', Arial, sans-serif; background-color: #f0f7ff; display: flex; flex-direction: column; height: 100dvh; overflow: hidden; margin: 0; }
+        .header { background: #28a745; color: white; padding: 15px; display: flex; justify-content: space-between; align-items: center; font-weight: bold; }
+        .header a { color: white; text-decoration: none; font-size: 0.9rem; background: rgba(0,0,0,0.2); padding: 5px 10px; border-radius: 5px; }
+        #chat { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 15px; background: #ffffff; }
+        .mensaje { max-width: 85%; padding: 12px 16px; border-radius: 15px; line-height: 1.5; font-size: 0.95rem; white-space: pre-wrap; }
+        .mensaje-usuario { align-self: flex-end; background: #28a745; color: white; border-bottom-right-radius: 2px; }
+        .mensaje-miku { align-self: flex-start; background: #f8f9fa; color: #1b3a4b; border-bottom-left-radius: 2px; border: 1px solid #ddd; font-family: 'Courier New', Courier, monospace; }
+        .mensaje-miku b { color: #28a745; font-family: 'Segoe UI', Arial, sans-serif;}
+        .input-area { padding: 15px; padding-bottom: 25px; border-top: 1px solid #eee; display: flex; gap: 10px; background: #fafafa; }
+        input { flex: 1; padding: 15px; border-radius: 30px; border: 1px solid #ddd; outline: none; font-size: 1rem; }
+        button.send-btn { padding: 15px 30px; background: #28a745; color: white; border: none; border-radius: 30px; cursor: pointer; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <span>💻 Miku Desarrolladora (Modo Admin)</span>
+        <a href="/admin">Volver al Panel</a>
+    </div>
+    <div id="chat">
+        <div class="mensaje mensaje-miku"><b>Miku Dev:</b> ¡Hola, Creador! 💙 Estoy lista para programar contigo. Pídeme cualquier función, script o código y te lo daré limpio y listo para usar. ¿Qué vamos a crear hoy?</div>
+    </div>
+    <div class="input-area">
+        <input type="text" id="mensaje" placeholder="Pídeme un código..." onkeypress="if(event.key === 'Enter') enviarDev()">
+        <button class="send-btn" onclick="enviarDev()">Enviar</button>
+    </div>
+
+    <script>
+        function escapeHtml(s) {
+            return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[c]));
+        }
+
+        async function enviarDev() {
+            const input = document.getElementById('mensaje');
+            const chatDiv = document.getElementById('chat');
+            const mensaje = input.value.trim();
+            if (!mensaje) return;
+
+            chatDiv.innerHTML += `<div class="mensaje mensaje-usuario"><b>Tú:</b> ${escapeHtml(mensaje)}</div>`;
+            input.value = '';
+            chatDiv.scrollTop = chatDiv.scrollHeight;
+
+            const idPensando = 'pensando-' + Date.now();
+            chatDiv.innerHTML += `<div class="mensaje mensaje-miku" id="${idPensando}"><b>Miku Dev:</b> Escribiendo código... ⌨️</div>`;
+            chatDiv.scrollTop = chatDiv.scrollHeight;
+
+            try {
+                const response = await fetch('/admin/responder_dev', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ mensaje: mensaje })
+                });
+                const data = await response.json();
+                
+                // Formatear código para que se vea bonito
+                let respuestaHTML = data.respuesta;
+                respuestaHTML = respuestaHTML.replace(/```(.*?)```/gs, '<pre style="background:#2b2b2b; color:#f8f8f2; padding:10px; border-radius:5px; overflow-x:auto;"><code>$1</code></pre>');
+                
+                document.getElementById(idPensando).innerHTML = `<b>Miku Dev:</b><br><br>${respuestaHTML}`;
+                chatDiv.scrollTop = chatDiv.scrollHeight;
+            } catch (e) {
+                document.getElementById(idPensando).innerHTML = `<b>Miku Dev:</b> Error de conexión. 💙`;
+            }
+        }
+    </script>
+</body>
+</html>
+"""
+
+@app.route('/admin/miku_dev')
+def miku_dev_chat():
+    if 'user_id' not in session or session['user_id'] != ADMIN_EMAIL:
+        return "Acceso denegado.", 403
+    return render_template_string(HTML_ADMIN_CHAT)
+
+@app.route('/admin/responder_dev', methods=['POST'])
+def responder_dev():
+    if 'user_id' not in session or session['user_id'] != ADMIN_EMAIL:
+        return jsonify({"respuesta": "Acceso denegado."})
+    
+    data = request.get_json()
+    mensaje = data.get('mensaje', '')
+    
+    prompt_dev = (
+        "Eres Miku Nakano, pero estás en tu 'Modo Desarrolladora' hablando con tu creador y jefe. "
+        "Tu única misión es ayudarlo a programar. Responde de forma técnica, directa y muy amable. "
+        "Cuando te pida código (Python, HTML, CSS, JS, etc.), entrégalo SIEMPRE dentro de bloques de código usando tres comillas invertidas (```). "
+        "Explica brevemente qué hace el código, sin rodeos. Eres su asistente personal de desarrollo."
+    )
+    
+    mensajes_api = [
+        {"role": "system", "content": prompt_dev},
+        {"role": "user", "content": mensaje}
+    ]
+    
+    try:
+        completion = cliente.chat.completions.create(
+            model="openai/gpt-oss-120b",
+            messages=mensajes_api,
+            temperature=0.3,
+            max_tokens=4000
+        )
+        return jsonify({"respuesta": completion.choices[0].message.content})
+    except Exception as e:
+        return jsonify({"respuesta": f"Error en el sistema: {str(e)}"})
+
+# ==========================================
+# RESPUESTA PÚBLICA (USUARIOS NORMALES)
+# ==========================================
 @app.route('/responder', methods=['POST'])
 def responder():
     if 'user_id' not in session:
@@ -714,6 +845,10 @@ def responder():
     if hermana not in HERMANAS_VALIDAS: hermana = "Miku"
     if not isinstance(mensaje, str) or not mensaje.strip(): return jsonify({"respuesta": "Por favor, escribe un mensaje. 💙"})
     if len(mensaje) > 2000: return jsonify({"respuesta": "Tu mensaje es muy largo. 💙"})
+
+    # 🚫 BLOQUEO DE CÓDIGO PARA USUARIOS NORMALES
+    if es_peticion_de_codigo(mensaje):
+        return jsonify({"respuesta": f"Lo siento mucho... 🥺 <b>{hermana}</b> y sus hermanas aún no tienen la capacidad de programar o generar códigos. Esa función exclusiva llegará muy pronto a la aplicación. ¡Pero puedo ayudarte con historia, matemáticas, idiomas y mucho más! 💙🌸"})
 
     user_id = session['user_id']
 
@@ -778,7 +913,6 @@ def responder():
     except Exception as e:
         error_str = str(e).lower()
         app.logger.error(f"Error Groq: {e}")
-        global ERRORES_RECIENTES
         if any(x in error_str for x in ["invalid api key", "invalid_api_key", "authentication", "unauthorized", "401", "api key", "quota", "rate limit", "429"]):
             return jsonify({"respuesta": "🌸 <b>Vaya, parece que estamos teniendo problemas técnicos.</b> 💙<br><br>Nuestro equipo ya está trabajando para solucionarlo lo antes posible. Por favor, intenta de nuevo en unos minutos. ¡Gracias por tu paciencia! 🌸"})
         return jsonify({"respuesta": "💙 <b>Lo siento mucho...</b><br><br>Parece que hubo un pequeño problema de conexión al procesar tu mensaje. A veces pasa cuando la señal está débil. ¿Podrías intentar de nuevo en un momentito? 💙🌸"})
