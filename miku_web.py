@@ -368,15 +368,20 @@ HTML = r"""
             }
         }, 100);
 
+        // ✅ FIX: La imagen ahora se ve obligatoriamente por 20 segundos completos
         window.addEventListener('load', () => {
             cargando = false;
             clearInterval(intervalo);
+            
+            // Forzar a la barra a llegar al 100%
             barra.style.width = '100%';
             textoPorcentaje.innerText = '100%';
+
+            // Ocultar la pantalla de carga después de 20 segundos
             setTimeout(() => {
                 const loader = document.getElementById('loading-screen');
                 if(loader) loader.classList.add('hidden');
-            }, 1000);
+            }, 20000); // 20,000 ms = 20 segundos
         });
 
         const saludos = {
