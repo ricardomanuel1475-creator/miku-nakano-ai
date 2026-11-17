@@ -39,7 +39,7 @@ limiter = Limiter(get_remote_address, app=app, default_limits=["50 per minute"],
 ADMIN_EMAIL = "ricardomanuel1475@gmail.com"
 MANTENIMIENTO_ACTIVO = False
 REPORTES_USUARIOS = []
-MEMORIA_ADMIN = {} # Para el punto 11 (recordar)
+MEMORIA_ADMIN = {}
 
 # ==========================================
 # GOOGLE OAUTH Y GROQ
@@ -55,6 +55,7 @@ cliente = Groq(api_key=GROQ_API_KEY)
 
 ALLOWED_EXTENSIONS = {'txt', 'py', 'js', 'html', 'css', 'md', 'json', 'pdf', 'png', 'jpg', 'jpeg', 'webp', 'gif'}
 MAX_FILE_SIZE = 5 * 1024 * 1024
+MAX_CHARS_CONTEXTO = 120000  # Límite para evitar exceder contexto de Groq
 
 # ==========================================
 # FILTROS Y FUNCIONES AUXILIARES
@@ -117,11 +118,68 @@ def extraer_texto_pdf(file_storage):
         return texto.strip() or "[PDF sin texto]"
     except: return "[No se pudo leer el PDF]"
 
-historiales = {}
-MAX_TURNOS = 20
+# ==========================================
+# NUEVA FUNCIÓN: DETECCIÓN DE CÓDIGO PEGADO
+# ==========================================
+def parece_codigo(texto):
+    """
+    Detecta si un texto pegado parece código fuente.
+    Retorna True si contiene múltiples indicadores de código.
+    """
+    if len(texto) < 300:
+        return False
+    indicadores = 0
+    patrones = [
+        r'^\s*(import|from)\s+\w+',
+        r'^\s*(def|class)\s+\w+',
+        r'^\s*(function|const|let|var)\s+\w+',
+        r'^\s*@app\.route',
+        r'^\s*<!DOCTYPE',
+        r'^\s*<html',
+        r'^\s*<\?php',
+        r'^\s*(public|private|protected)\s+\w+',
+        r'^\s*#include\s*<',
+        r'^\s*(SELECT|INSERT|UPDATE|DELETE)\s+',
+        r'=>|\->|::',
+        r'\{\s*$',
+        r'\}\s*$',
+    ]
+    for patron in patrones:
+        if re.search(patron, texto, re.MULTILINE):
+            indicadores += 1
+    # Si tiene 3+ indicadores o es muy largo con llaves/indentación
+    if indicadores >= 3:
+        return True
+    lineas = texto.split('\n')
+    lineas_con_indentacion = sum(1 for l in lineas if l.startswith(('    ', '\t')))
+    if len(lineas) > 15 and lineas_con_indentacion > len(lineas) * 0.3:
+        return True
+    return False
+
+def detectar_extension_codigo(texto):
+    """Infiere la extensión del código pegado."""
+    t = texto.lower()
+    if '<?php' in t or 'namespace ' in t and 'use ' in t: return '.php'
+    if 'import ' in t and ('def ' in t or 'class ' in t): return '.py'
+    if 'function ' in t or 'const ' in t or 'let ' in t or '=>' in t: return '.js'
+    if '<!doctype html' in t or '<html' in t: return '.html'
+    if 'using system' in t or 'namespace ' in t: return '.cs'
+    if 'public class' in t or 'import java' in t: return '.java'
+    if 'package main' in t or 'func ' in t: return '.go'
+    if '#include' in t: return '.cpp'
+    if 'select ' in t and 'from ' in t: return '.sql'
+    if '{' in t and ':' in t and ('color' in t or 'margin' in t or 'padding' in t): return '.css'
+    return '.txt'
 
 # ==========================================
-# PROMPTS MAESTROS (LOS 18 PUNTOS)
+# HISTORIALES
+# ==========================================
+historiales = {}
+MAX_TURNOS = 20
+HERMANAS_VALIDAS = {"Ichika", "Nino", "Miku", "Yotsuba", "Itsuki"}
+
+# ==========================================
+# PROMPTS MAESTROS
 # ==========================================
 PERSONALIDADES = {
     "Ichika": "Eres Ichika Nakano. Eres la hermana mayor, madura, cálida, bromista y atenta. Hablas de forma natural y cercana. Escuchas con paciencia.",
@@ -139,6 +197,9 @@ ESPECIALIDADES = {
     "Itsuki": "ciencias naturales y gastronomía."
 }
 
+# ==========================================
+# HTML PÚBLICO (sin cambios grandes, solo JS mejorado)
+# ==========================================
 HTML = r"""
 <!DOCTYPE html>
 <html>
@@ -151,7 +212,6 @@ HTML = r"""
     <link rel="preload" as="image" href="/static/carga.png" media="(orientation: portrait)">
     <link rel="preload" as="image" href="/static/carga_pc.png" media="(orientation: landscape)">
     <style>
-        /* Estilos generales (igual que tu versión anterior) */
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: 'Segoe UI', Arial, sans-serif; background-color: #f0f7ff; display: flex; height: 100dvh; overflow: hidden; }
         #loading-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100dvh; background-color: #0f0f1a; background-image: url('/static/carga.png'); background-size: cover; background-position: center; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 9999; transition: opacity 0.8s ease; }
@@ -365,6 +425,248 @@ HTML = r"""
 </html>
 """
 
+# ==========================================
+# HTML ADMIN CHAT (CON DETECCIÓN DE CÓDIGO PEGADO)
+# ==========================================
+HTML_ADMIN_CHAT = r"""
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Miku Admin</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token }}">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Segoe UI', Arial, sans-serif; background-color: #e8f5e9; display: flex; height: 100dvh; overflow: hidden; }
+        .sidebar { width: 320px; background: linear-gradient(180deg, #d4edda 0%, #a3d9a5 100%); display: flex; flex-direction: column; padding: 15px; border-right: 2px solid #8bc34a; flex-shrink: 0; overflow: hidden; }
+        .profile-header { display: flex; flex-direction: column; align-items: center; padding-bottom: 15px; border-bottom: 1px solid #8bc34a; margin-bottom: 15px; flex-shrink: 0; }
+        .profile-header img { width: 180px; height: 180px; object-fit: cover; border-radius: 25px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); border: 4px solid #fff; }
+        .profile-header h2 { margin-top: 12px; color: #1b5e20; font-size: 1.4rem; text-align: center; }
+        .history-section { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+        .history-title { font-size: 0.9rem; font-weight: bold; color: #1b5e20; margin-bottom: 10px; }
+        .new-chat-btn { background: #28a745; color: white; border: none; padding: 10px 12px; border-radius: 8px; cursor: pointer; font-size: 0.85rem; width: 100%; margin-bottom: 10px; font-weight: bold; transition: 0.3s; }
+        .new-chat-btn:hover { background: #1e7e34; }
+        #historyList { overflow-y: auto; flex: 1; padding-right: 5px; }
+        .chat-history-item { display: flex; justify-content: space-between; align-items: center; padding: 10px; border-radius: 8px; margin-bottom: 5px; cursor: pointer; font-size: 0.85rem; color: #333; background: #fff; border: 1px solid #c3e6cb; transition: 0.2s; }
+        .chat-history-item:hover { background: #d4edda; color: #1b5e20; border-color: #28a745; }
+        .chat-history-item span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; }
+        .delete-btn { display: none; background: transparent; border: none; color: #ff4d4d; cursor: pointer; font-size: 1rem; padding: 0 5px; }
+        .chat-history-item:hover .delete-btn { display: block; }
+        .main-chat { flex: 1; display: flex; flex-direction: column; background: #ffffff; position: relative; }
+        .chat-header { padding: 20px; border-bottom: 1px solid #eee; color: #1b5e20; font-weight: bold; font-size: 1.2rem; display: flex; align-items: center; justify-content: space-between; background: #f1f8e9; }
+        #chat { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 15px; }
+        .mensaje { max-width: 85%; padding: 12px 16px; border-radius: 15px; line-height: 1.5; font-size: 0.95rem; white-space: pre-wrap; }
+        .mensaje-usuario { align-self: flex-end; background: #28a745; color: white; border-bottom-right-radius: 2px; }
+        .mensaje-miku { align-self: flex-start; background: #f1f8e9; color: #1b3a4b; border-bottom-left-radius: 2px; border: 1px solid #c3e6cb; }
+        .mensaje-miku b { color: #1b5e20; }
+        .input-area { padding: 15px; padding-bottom: 25px; border-top: 1px solid #eee; display: flex; gap: 10px; background: #fafafa; align-items: center; flex-wrap: wrap; }
+        input[type="text"] { flex: 1; padding: 15px; border-radius: 30px; border: 1px solid #ddd; outline: none; font-size: 1rem; min-width: 180px; }
+        input[type="text"]:focus { border-color: #28a745; box-shadow: 0 0 0 3px rgba(40, 167, 69, 0.2); }
+        button.send-btn { padding: 15px 30px; background: #28a745; color: white; border: none; border-radius: 30px; cursor: pointer; font-weight: bold; }
+        .file-btn { background: #e8f5e9; border: 2px dashed #28a745; color: #1b5e20; padding: 12px 16px; border-radius: 30px; cursor: pointer; font-weight: bold; font-size: 0.9rem; white-space: nowrap; }
+        .archivos-seleccionados { width: 100%; display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+        .archivo-chip { background: #d4edda; color: #1b5e20; padding: 5px 10px; border-radius: 20px; font-size: 0.8rem; display: flex; align-items: center; gap: 6px; }
+        .archivo-chip button { background: none; border: none; color: #c62828; cursor: pointer; font-size: 1rem; line-height: 1; }
+        .preview-imagen { max-width: 280px; max-height: 200px; border-radius: 10px; margin-top: 8px; border: 2px solid #c3e6cb; display: block; }
+        .btn-back { text-decoration: none; font-size: 0.9rem; background: #e0f0ff; color: #1b5e20; padding: 8px 12px; border-radius: 5px; font-weight: bold; border: 1px solid #28a745; }
+        .aviso-codigo { background: #fff3cd; color: #856404; padding: 8px 12px; border-radius: 8px; font-size: 0.85rem; margin-top: 6px; border: 1px solid #ffc107; display: none; }
+        @media (max-width: 768px) { .sidebar { display: none; } }
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <div class="profile-header">
+            <img src="/static/miku.webp" alt="Miku Admin">
+            <h2>Miku Admin 💻</h2>
+        </div>
+        <div class="history-section">
+            <div class="history-title">Mis Proyectos</div>
+            <button class="new-chat-btn" onclick="nuevoChatDev()">+ Nuevo Proyecto</button>
+            <div id="historyList"></div>
+        </div>
+    </div>
+
+    <div class="main-chat">
+        <div class="chat-header">
+            <span>💻 Miku Admin (Modo Admin)</span>
+            <a href="/admin" class="btn-back">← Volver al Panel</a>
+        </div>
+        <div id="chat"></div>
+        <div class="input-area">
+            <label class="file-btn">📎 Archivos<input type="file" id="fileInput" multiple accept=".txt,.py,.js,.html,.css,.md,.json,.pdf,.png,.jpg,.jpeg,.webp,.gif" style="display:none;" onchange="mostrarArchivos()"></label>
+            <input type="text" id="mensaje" placeholder="Escribe, pega código o captura (Ctrl+V)..." onkeypress="if(event.key === 'Enter') enviarDev()" oninput="detectarCodigoPegadoEnInput()">
+            <button class="send-btn" onclick="enviarDev()">Enviar</button>
+            <div class="archivos-seleccionados" id="listaArchivos"></div>
+            <div class="aviso-codigo" id="avisoCodigo">🔍 Se detectó código pegado. Se enviará como archivo virtual para mejor análisis.</div>
+        </div>
+    </div>
+
+    <script>
+        const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+        let archivosTemporales = [];
+        function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[c])); }
+        function copiarCodigo(idElemento) { navigator.clipboard.writeText(document.getElementById(idElemento).innerText).then(() => alert("¡Código copiado! 💙")); }
+        function mostrarArchivos() { Array.from(document.getElementById('fileInput').files).forEach(f => archivosTemporales.push(f)); actualizarListaArchivos(); }
+        function actualizarListaArchivos() { const lista = document.getElementById('listaArchivos'); lista.innerHTML = ''; archivosTemporales.forEach((file, index) => { const chip = document.createElement('div'); chip.className = 'archivo-chip'; chip.innerHTML = `${file.name || 'Captura.png'} <button onclick="quitarArchivo(${index})">×</button>`; lista.appendChild(chip); }); }
+        function quitarArchivo(index) { archivosTemporales.splice(index, 1); actualizarListaArchivos(); }
+        document.addEventListener('paste', function(e) { const items = (e.clipboardData || e.originalEvent.clipboardData).items; for (let item of items) { if (item.type.indexOf('image') !== -1) { e.preventDefault(); const blob = item.getAsFile(); const file = new File([blob], `captura_${Date.now()}.png`, { type: blob.type }); archivosTemporales.push(file); actualizarListaArchivos(); } } });
+        let currentChatId = Date.now().toString();
+        let chats = JSON.parse(localStorage.getItem('miku_dev_chats')) || {};
+
+        // ==========================================
+        // DETECCIÓN DE CÓDIGO PEGADO EN EL INPUT
+        // ==========================================
+        function pareceCodigo(texto) {
+            if (texto.length < 300) return false;
+            let indicadores = 0;
+            const patrones = [
+                /^\s*(import|from)\s+\w+/m,
+                /^\s*(def|class)\s+\w+/m,
+                /^\s*(function|const|let|var)\s+\w+/m,
+                /^\s*@app\.route/m,
+                /^\s*<!DOCTYPE/m,
+                /^\s*<html/m,
+                /^\s*<\?php/m,
+                /^\s*(public|private|protected)\s+\w+/m,
+                /^\s*#include\s*</m,
+                /^\s*(SELECT|INSERT|UPDATE|DELETE)\s+/m,
+                /=>|\->|::/,
+                /\{\s*$/m,
+                /\}\s*$/m,
+            ];
+            patrones.forEach(p => { if (p.test(texto)) indicadores++; });
+            if (indicadores >= 3) return true;
+            const lineas = texto.split('\n');
+            const lineasConIndentacion = lineas.filter(l => l.startsWith('    ') || l.startsWith('\t')).length;
+            if (lineas.length > 15 && lineasConIndentacion > lineas.length * 0.3) return true;
+            return false;
+        }
+
+        function detectarExtensionCodigo(texto) {
+            const t = texto.toLowerCase();
+            if (t.includes('<?php') || (t.includes('namespace ') && t.includes('use '))) return '.php';
+            if (t.includes('import ') && (t.includes('def ') || t.includes('class '))) return '.py';
+            if (t.includes('function ') || t.includes('const ') || t.includes('let ') || t.includes('=>')) return '.js';
+            if (t.includes('<!doctype html') || t.includes('<html')) return '.html';
+            if (t.includes('using system') || t.includes('namespace ')) return '.cs';
+            if (t.includes('public class') || t.includes('import java')) return '.java';
+            if (t.includes('package main') || t.includes('func ')) return '.go';
+            if (t.includes('#include')) return '.cpp';
+            if (t.includes('select ') && t.includes('from ')) return '.sql';
+            if (t.includes('{') && t.includes(':') && (t.includes('color') || t.includes('margin') || t.includes('padding'))) return '.css';
+            return '.txt';
+        }
+
+        function detectarCodigoPegadoEnInput() {
+            const input = document.getElementById('mensaje');
+            const aviso = document.getElementById('avisoCodigo');
+            const texto = input.value;
+            if (pareceCodigo(texto)) {
+                aviso.style.display = 'block';
+            } else {
+                aviso.style.display = 'none';
+            }
+        }
+
+        async function convertirCodigoAArchivo(texto) {
+            const ext = detectarExtensionCodigo(texto);
+            const nombre = `pegado_${Date.now()}${ext}`;
+            const blob = new Blob([texto], { type: 'text/plain' });
+            const file = new File([blob], nombre, { type: 'text/plain' });
+            archivosTemporales.push(file);
+            actualizarListaArchivos();
+            document.getElementById('mensaje').value = '';
+            document.getElementById('avisoCodigo').style.display = 'none';
+        }
+
+        function guardarChats() { localStorage.setItem('miku_dev_chats', JSON.stringify(chats)); renderizarHistorial(); }
+        function renderizarHistorial() { const list = document.getElementById('historyList'); list.innerHTML = ''; const chatIds = Object.keys(chats).sort((a, b) => b - a); chatIds.forEach(id => { const chat = chats[id]; if(chat && chat.length > 0) { const div = document.createElement('div'); div.className = 'chat-history-item'; const span = document.createElement('span'); span.innerText = chat[0].texto; span.onclick = () => { cargarChat(id); }; const btn = document.createElement('button'); btn.className = 'delete-btn'; btn.innerHTML = '🗑️'; btn.onclick = (e) => { e.stopPropagation(); if(confirm('¿Eliminar este proyecto?')) { delete chats[id]; guardarChats(); if (currentChatId === id) nuevoChatDev(); } }; div.appendChild(span); div.appendChild(btn); list.appendChild(div); } }); }
+        function nuevoChatDev() { currentChatId = Date.now().toString(); document.getElementById('chat').innerHTML = ''; iniciarConversacionEspontanea(); }
+        function cargarChat(id) { currentChatId = id; const chat = chats[id]; const chatDiv = document.getElementById('chat'); chatDiv.innerHTML = ''; chat.forEach(msg => { if (msg.role === 'user') { chatDiv.innerHTML += `<div class="mensaje mensaje-usuario"><b>Tú:</b> ${escapeHtml(msg.texto)}</div>`; } else { chatDiv.innerHTML += `<div class="mensaje mensaje-miku"><b>Miku Admin:</b><br><br>${msg.html}</div>`; } }); chatDiv.scrollTop = chatDiv.scrollHeight; }
+
+        async function iniciarConversacionEspontanea() {
+            if (!chats[currentChatId] || chats[currentChatId].length === 0) {
+                try {
+                    const response = await fetch('/admin/iniciar_chat', { method: 'POST', headers: { 'X-CSRFToken': csrfToken } });
+                    const data = await response.json();
+                    document.getElementById('chat').innerHTML = `<div class="mensaje mensaje-miku"><b>Miku Admin:</b><br><br>${data.respuesta}</div>`;
+                    chats[currentChatId] = [{ role: 'miku', html: data.respuesta }];
+                    guardarChats();
+                } catch (e) { console.log("No se pudo iniciar la conversación automática."); }
+            }
+        }
+
+        async function enviarDev() {
+            const input = document.getElementById('mensaje');
+            const chatDiv = document.getElementById('chat');
+            let mensaje = input.value.trim();
+            let files = [...archivosTemporales];
+            let tieneArchivos = files.length > 0;
+
+            // Si el mensaje pegado parece código, convertirlo automáticamente en archivo virtual
+            if (mensaje && pareceCodigo(mensaje)) {
+                await convertirCodigoAArchivo(mensaje);
+                files = [...archivosTemporales];
+                tieneArchivos = files.length > 0;
+                mensaje = "Analiza este código que acabo de pegar, por favor.";
+            }
+
+            if (!mensaje && !tieneArchivos) return;
+            if (!chats[currentChatId]) chats[currentChatId] = [];
+            let textoMostrar = mensaje || "(Archivos)";
+            if (tieneArchivos) {
+                textoMostrar += "\n📎 " + files.map(f => f.name || "captura.png").join(", ");
+            }
+            chats[currentChatId].push({ role: 'user', texto: textoMostrar });
+            let htmlUsuario = `<b>Tú:</b> ${escapeHtml(mensaje || "(Sin texto)")}`;
+            if (tieneArchivos) {
+                htmlUsuario += "<br><br>";
+                files.forEach(file => {
+                    if (file.type && file.type.startsWith('image/')) {
+                        htmlUsuario += `<img src="${URL.createObjectURL(file)}" class="preview-imagen"><br>`;
+                    } else {
+                        htmlUsuario += `📎 ${escapeHtml(file.name)}<br>`;
+                    }
+                });
+            }
+            chatDiv.innerHTML += `<div class="mensaje mensaje-usuario">${htmlUsuario}</div>`;
+            input.value = '';
+            archivosTemporales = [];
+            document.getElementById('fileInput').value = '';
+            document.getElementById('listaArchivos').innerHTML = '';
+            document.getElementById('avisoCodigo').style.display = 'none';
+            chatDiv.scrollTop = chatDiv.scrollHeight;
+            const idPensando = 'pensando-' + Date.now();
+            chatDiv.innerHTML += `<div class="mensaje mensaje-miku" id="${idPensando}"><b>Miku Admin:</b> Analizando... ⌨️</div>`;
+            guardarChats();
+            try {
+                const formData = new FormData();
+                formData.append('mensaje', mensaje || "Analiza lo que te envié.");
+                files.forEach(file => formData.append('archivos', file));
+                const response = await fetch('/admin/responder_dev', { method: 'POST', headers: { 'X-CSRFToken': csrfToken }, body: formData });
+                const data = await response.json();
+                let respuestaHTML = data.respuesta;
+                // Mejorar regex de bloques de código (soporta ``` con lenguaje)
+                respuestaHTML = respuestaHTML.replace(/```([\w]*)\n?([\s\S]*?)```/g, (match, lenguaje, codigo) => {
+                    const idBoton = 'copiar-' + Math.floor(Math.random() * 100000);
+                    const codigoSeguro = codigo.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                    const etiqueta = lenguaje ? `<span style="background:#28a745;color:white;padding:2px 8px;border-radius:4px;font-size:0.75rem;margin-bottom:5px;display:inline-block;">${lenguaje}</span>` : '';
+                    return `<div style="margin: 15px 0; border: 1px solid #c3e6cb; border-radius: 8px; overflow: hidden;"><div style="padding:8px;background:#f1f8e9;border-bottom:1px solid #c3e6cb;">${etiqueta}</div><pre style="margin: 0; padding: 15px; background: #ffffff; color: #333; overflow-x: auto; font-family: 'Courier New', Courier, monospace; font-size: 0.9rem;"><code id="${idBoton}">${codigoSeguro}</code></pre><div style="background: #f1f8e9; padding: 8px; text-align: right; border-top: 1px solid #c3e6cb;"><button onclick="copiarCodigo('${idBoton}')" style="background: #28a745; color: white; border: none; padding: 6px 12px; border-radius: 5px; cursor: pointer; font-size: 0.85rem; font-weight: bold;">📋 Copiar Código</button></div></div>`;
+                });
+                document.getElementById(idPensando).innerHTML = `<b>Miku Admin:</b><br><br>${respuestaHTML}`;
+                chatDiv.scrollTop = chatDiv.scrollHeight;
+                chats[currentChatId].push({ role: 'miku', html: respuestaHTML });
+                guardarChats();
+            } catch (e) { document.getElementById(idPensando).innerHTML = `<b>Miku Admin:</b> Error de conexión. 💙`; }
+        }
+
+        iniciarConversacionEspontanea();
+        renderizarHistorial();
+    </script>
+</body>
+</html>
+"""
+
 @app.route('/')
 def index():
     if 'user' not in session: return redirect(url_for('login'))
@@ -451,142 +753,8 @@ def toggle_mantenimiento():
     return redirect('/admin')
 
 # ==========================================
-# CHAT MIKU ADMIN (PUNTOS 1 AL 18)
+# CHAT MIKU ADMIN (CON MEJORAS)
 # ==========================================
-HTML_ADMIN_CHAT = r"""
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Miku Admin</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="csrf-token" content="{{ csrf_token }}">
-    <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: 'Segoe UI', Arial, sans-serif; background-color: #e8f5e9; display: flex; height: 100dvh; overflow: hidden; }
-        .sidebar { width: 320px; background: linear-gradient(180deg, #d4edda 0%, #a3d9a5 100%); display: flex; flex-direction: column; padding: 15px; border-right: 2px solid #8bc34a; flex-shrink: 0; overflow: hidden; }
-        .profile-header { display: flex; flex-direction: column; align-items: center; padding-bottom: 15px; border-bottom: 1px solid #8bc34a; margin-bottom: 15px; flex-shrink: 0; }
-        .profile-header img { width: 180px; height: 180px; object-fit: cover; border-radius: 25px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); border: 4px solid #fff; }
-        .profile-header h2 { margin-top: 12px; color: #1b5e20; font-size: 1.4rem; text-align: center; }
-        .history-section { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
-        .history-title { font-size: 0.9rem; font-weight: bold; color: #1b5e20; margin-bottom: 10px; }
-        .new-chat-btn { background: #28a745; color: white; border: none; padding: 10px 12px; border-radius: 8px; cursor: pointer; font-size: 0.85rem; width: 100%; margin-bottom: 10px; font-weight: bold; transition: 0.3s; }
-        .new-chat-btn:hover { background: #1e7e34; }
-        #historyList { overflow-y: auto; flex: 1; padding-right: 5px; }
-        .chat-history-item { display: flex; justify-content: space-between; align-items: center; padding: 10px; border-radius: 8px; margin-bottom: 5px; cursor: pointer; font-size: 0.85rem; color: #333; background: #fff; border: 1px solid #c3e6cb; transition: 0.2s; }
-        .chat-history-item:hover { background: #d4edda; color: #1b5e20; border-color: #28a745; }
-        .chat-history-item span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; }
-        .delete-btn { display: none; background: transparent; border: none; color: #ff4d4d; cursor: pointer; font-size: 1rem; padding: 0 5px; }
-        .chat-history-item:hover .delete-btn { display: block; }
-        .main-chat { flex: 1; display: flex; flex-direction: column; background: #ffffff; position: relative; }
-        .chat-header { padding: 20px; border-bottom: 1px solid #eee; color: #1b5e20; font-weight: bold; font-size: 1.2rem; display: flex; align-items: center; justify-content: space-between; background: #f1f8e9; }
-        #chat { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 15px; }
-        .mensaje { max-width: 85%; padding: 12px 16px; border-radius: 15px; line-height: 1.5; font-size: 0.95rem; white-space: pre-wrap; }
-        .mensaje-usuario { align-self: flex-end; background: #28a745; color: white; border-bottom-right-radius: 2px; }
-        .mensaje-miku { align-self: flex-start; background: #f1f8e9; color: #1b3a4b; border-bottom-left-radius: 2px; border: 1px solid #c3e6cb; }
-        .mensaje-miku b { color: #1b5e20; }
-        .input-area { padding: 15px; padding-bottom: 25px; border-top: 1px solid #eee; display: flex; gap: 10px; background: #fafafa; align-items: center; flex-wrap: wrap; }
-        input[type="text"] { flex: 1; padding: 15px; border-radius: 30px; border: 1px solid #ddd; outline: none; font-size: 1rem; min-width: 180px; }
-        input[type="text"]:focus { border-color: #28a745; box-shadow: 0 0 0 3px rgba(40, 167, 69, 0.2); }
-        button.send-btn { padding: 15px 30px; background: #28a745; color: white; border: none; border-radius: 30px; cursor: pointer; font-weight: bold; }
-        .file-btn { background: #e8f5e9; border: 2px dashed #28a745; color: #1b5e20; padding: 12px 16px; border-radius: 30px; cursor: pointer; font-weight: bold; font-size: 0.9rem; white-space: nowrap; }
-        .archivos-seleccionados { width: 100%; display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
-        .archivo-chip { background: #d4edda; color: #1b5e20; padding: 5px 10px; border-radius: 20px; font-size: 0.8rem; display: flex; align-items: center; gap: 6px; }
-        .archivo-chip button { background: none; border: none; color: #c62828; cursor: pointer; font-size: 1rem; line-height: 1; }
-        .preview-imagen { max-width: 280px; max-height: 200px; border-radius: 10px; margin-top: 8px; border: 2px solid #c3e6cb; display: block; }
-        .btn-back { text-decoration: none; font-size: 0.9rem; background: #e0f0ff; color: #1b5e20; padding: 8px 12px; border-radius: 5px; font-weight: bold; border: 1px solid #28a745; }
-        @media (max-width: 768px) { .sidebar { display: none; } }
-    </style>
-</head>
-<body>
-    <div class="sidebar">
-        <div class="profile-header">
-            <img src="/static/miku.webp" alt="Miku Admin">
-            <h2>Miku Admin 💻</h2>
-        </div>
-        <div class="history-section">
-            <div class="history-title">Mis Proyectos</div>
-            <button class="new-chat-btn" onclick="nuevoChatDev()">+ Nuevo Proyecto</button>
-            <div id="historyList"></div>
-        </div>
-    </div>
-
-    <div class="main-chat">
-        <div class="chat-header">
-            <span>💻 Miku Admin (Modo Admin)</span>
-            <a href="/admin" class="btn-back">← Volver al Panel</a>
-        </div>
-        <div id="chat"></div>
-        <div class="input-area">
-            <label class="file-btn">📎 Archivos<input type="file" id="fileInput" multiple accept=".txt,.py,.js,.html,.css,.md,.json,.pdf,.png,.jpg,.jpeg,.webp,.gif" style="display:none;" onchange="mostrarArchivos()"></label>
-            <input type="text" id="mensaje" placeholder="Escribe o pega una captura (Ctrl+V)..." onkeypress="if(event.key === 'Enter') enviarDev()">
-            <button class="send-btn" onclick="enviarDev()">Enviar</button>
-            <div class="archivos-seleccionados" id="listaArchivos"></div>
-        </div>
-    </div>
-
-    <script>
-        const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
-        let archivosTemporales = [];
-        function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[c])); }
-        function copiarCodigo(idElemento) { navigator.clipboard.writeText(document.getElementById(idElemento).innerText).then(() => alert("¡Código copiado! 💙")); }
-        function mostrarArchivos() { Array.from(document.getElementById('fileInput').files).forEach(f => archivosTemporales.push(f)); actualizarListaArchivos(); }
-        function actualizarListaArchivos() { const lista = document.getElementById('listaArchivos'); lista.innerHTML = ''; archivosTemporales.forEach((file, index) => { const chip = document.createElement('div'); chip.className = 'archivo-chip'; chip.innerHTML = `${file.name || 'Captura.png'} <button onclick="quitarArchivo(${index})">×</button>`; lista.appendChild(chip); }); }
-        function quitarArchivo(index) { archivosTemporales.splice(index, 1); actualizarListaArchivos(); }
-        document.addEventListener('paste', function(e) { const items = (e.clipboardData || e.originalEvent.clipboardData).items; for (let item of items) { if (item.type.indexOf('image') !== -1) { e.preventDefault(); const blob = item.getAsFile(); const file = new File([blob], `captura_${Date.now()}.png`, { type: blob.type }); archivosTemporales.push(file); actualizarListaArchivos(); } } });
-        let currentChatId = Date.now().toString();
-        let chats = JSON.parse(localStorage.getItem('miku_dev_chats')) || {};
-        function guardarChats() { localStorage.setItem('miku_dev_chats', JSON.stringify(chats)); renderizarHistorial(); }
-        function renderizarHistorial() { const list = document.getElementById('historyList'); list.innerHTML = ''; const chatIds = Object.keys(chats).sort((a, b) => b - a); chatIds.forEach(id => { const chat = chats[id]; if(chat && chat.length > 0) { const div = document.createElement('div'); div.className = 'chat-history-item'; const span = document.createElement('span'); span.innerText = chat[0].texto; span.onclick = () => { cargarChat(id); }; const btn = document.createElement('button'); btn.className = 'delete-btn'; btn.innerHTML = '🗑️'; btn.onclick = (e) => { e.stopPropagation(); if(confirm('¿Eliminar este proyecto?')) { delete chats[id]; guardarChats(); if (currentChatId === id) nuevoChatDev(); } }; div.appendChild(span); div.appendChild(btn); list.appendChild(div); } }); }
-        function nuevoChatDev() { currentChatId = Date.now().toString(); document.getElementById('chat').innerHTML = ''; iniciarConversacionEspontanea(); }
-        function cargarChat(id) { currentChatId = id; const chat = chats[id]; const chatDiv = document.getElementById('chat'); chatDiv.innerHTML = ''; chat.forEach(msg => { if (msg.role === 'user') { chatDiv.innerHTML += `<div class="mensaje mensaje-usuario"><b>Tú:</b> ${escapeHtml(msg.texto)}</div>`; } else { chatDiv.innerHTML += `<div class="mensaje mensaje-miku"><b>Miku Admin:</b><br><br>${msg.html}</div>`; } }); chatDiv.scrollTop = chatDiv.scrollHeight; }
-        
-        async function iniciarConversacionEspontanea() {
-            if (!chats[currentChatId] || chats[currentChatId].length === 0) {
-                try {
-                    const response = await fetch('/admin/iniciar_chat', { method: 'POST', headers: { 'X-CSRFToken': csrfToken } });
-                    const data = await response.json();
-                    document.getElementById('chat').innerHTML = `<div class="mensaje mensaje-miku"><b>Miku Admin:</b><br><br>${data.respuesta}</div>`;
-                    chats[currentChatId] = [{ role: 'miku', html: data.respuesta }];
-                    guardarChats();
-                } catch (e) { console.log("No se pudo iniciar la conversación automática."); }
-            }
-        }
-
-        async function enviarDev() {
-            const input = document.getElementById('mensaje'); const chatDiv = document.getElementById('chat'); const mensaje = input.value.trim(); const files = [...archivosTemporales]; const tieneArchivos = files.length > 0;
-            if (!mensaje && !tieneArchivos) return;
-            if (!chats[currentChatId]) chats[currentChatId] = [];
-            let textoMostrar = mensaje || "(Archivos)"; if (tieneArchivos) { textoMostrar += "\\n📎 " + files.map(f => f.name || "captura.png").join(", "); }
-            chats[currentChatId].push({ role: 'user', texto: textoMostrar });
-            let htmlUsuario = `<b>Tú:</b> ${escapeHtml(mensaje || "(Sin texto)")}`;
-            if (tieneArchivos) { htmlUsuario += "<br><br>"; files.forEach(file => { if (file.type && file.type.startsWith('image/')) { htmlUsuario += `<img src="${URL.createObjectURL(file)}" class="preview-imagen"><br>`; } else { htmlUsuario += `📎 ${escapeHtml(file.name)}<br>`; } }); }
-            chatDiv.innerHTML += `<div class="mensaje mensaje-usuario">${htmlUsuario}</div>`;
-            input.value = ''; archivosTemporales = []; document.getElementById('fileInput').value = ''; document.getElementById('listaArchivos').innerHTML = ''; chatDiv.scrollTop = chatDiv.scrollHeight;
-            const idPensando = 'pensando-' + Date.now(); chatDiv.innerHTML += `<div class="mensaje mensaje-miku" id="${idPensando}"><b>Miku Admin:</b> Analizando... ⌨️</div>`; guardarChats();
-            try {
-                const formData = new FormData(); formData.append('mensaje', mensaje); files.forEach(file => formData.append('archivos', file));
-                const response = await fetch('/admin/responder_dev', { method: 'POST', headers: { 'X-CSRFToken': csrfToken }, body: formData });
-                const data = await response.json();
-                let respuestaHTML = data.respuesta;
-                respuestaHTML = respuestaHTML.replace(/```(.*?)```/gs, (match, codigo) => {
-                    const idBoton = 'copiar-' + Math.floor(Math.random() * 100000);
-                    const codigoSeguro = codigo.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-                    return `<div style="margin: 15px 0; border: 1px solid #c3e6cb; border-radius: 8px; overflow: hidden;"><pre style="margin: 0; padding: 15px; background: #ffffff; color: #333; overflow-x: auto; font-family: 'Courier New', Courier, monospace; font-size: 0.9rem;"><code id="${idBoton}">${codigoSeguro}</code></pre><div style="background: #f1f8e9; padding: 8px; text-align: right; border-top: 1px solid #c3e6cb;"><button onclick="copiarCodigo('${idBoton}')" style="background: #28a745; color: white; border: none; padding: 6px 12px; border-radius: 5px; cursor: pointer; font-size: 0.85rem; font-weight: bold;">📋 Copiar Código</button></div></div>`;
-                });
-                document.getElementById(idPensando).innerHTML = `<b>Miku Admin:</b><br><br>${respuestaHTML}`;
-                chatDiv.scrollTop = chatDiv.scrollHeight;
-                chats[currentChatId].push({ role: 'miku', html: respuestaHTML });
-                guardarChats();
-            } catch (e) { document.getElementById(idPensando).innerHTML = `<b>Miku Admin:</b> Error de conexión. 💙`; }
-        }
-        
-        iniciarConversacionEspontanea();
-        renderizarHistorial();
-    </script>
-</body>
-</html>
-"""
-
 @app.route('/admin/miku_dev')
 def miku_dev_chat():
     if 'user_id' not in session or session['user_id'] != ADMIN_EMAIL: return "Acceso denegado.", 403
@@ -596,13 +764,10 @@ def miku_dev_chat():
 @limiter.limit("5 per minute")
 def iniciar_chat_admin():
     if 'user_id' not in session or session['user_id'] != ADMIN_EMAIL: return jsonify({"respuesta": "Acceso denegado."})
-    
-    # Punto 17: Avisar de reportes nuevos
     reportes_nuevos = [r for r in REPORTES_USUARIOS if not r.get('leido')]
     aviso_reportes = ""
     if reportes_nuevos:
         aviso_reportes = f"Por cierto, tienes {len(reportes_nuevos)} reportes nuevos de usuarios esperando ser revisados. ¿Quieres que los analicemos juntos?"
-
     prompt_saludo = (
         "Eres Miku Nakano en tu modo Desarrolladora y administradora. "
         "El creador acaba de entrar al chat. Inicia una conversación espontánea. "
@@ -610,12 +775,10 @@ def iniciar_chat_admin():
         "Si hay reportes nuevos, avísale de forma natural y ofrécele ayuda para analizarlos. "
         "No uses asteriscos para negritas. Sé dulce, técnica y muy amable. Máximo 4 oraciones."
     )
-    
     mensajes_api = [
         {"role": "system", "content": prompt_saludo},
         {"role": "user", "content": f"Hola Miku, acabo de entrar. {aviso_reportes}"}
     ]
-    
     try:
         completion = cliente.chat.completions.create(model="openai/gpt-oss-120b", messages=mensajes_api, temperature=0.7, max_tokens=300)
         respuesta = re.sub(r'\*\*(.*?)\*\*', r'\1', completion.choices[0].message.content)
@@ -627,11 +790,13 @@ def iniciar_chat_admin():
 @limiter.limit("15 per minute")
 def responder_dev():
     if 'user_id' not in session or session['user_id'] != ADMIN_EMAIL: return jsonify({"respuesta": "Acceso denegado."})
-    
+
     mensaje = request.form.get('mensaje', '') or ''
     archivos = request.files.getlist('archivos')
     contenido_archivos = ""
-    
+    total_chars = 0
+
+    # Procesar archivos subidos
     for archivo in archivos:
         if archivo and archivo.filename and allowed_file(archivo.filename):
             archivo.seek(0, os.SEEK_END)
@@ -640,18 +805,37 @@ def responder_dev():
             nombre = secure_filename(archivo.filename)
             ext = nombre.rsplit('.', 1)[1].lower() if '.' in nombre else ''
             if ext in {'txt', 'py', 'js', 'html', 'css', 'md', 'json'}:
-                contenido_archivos += f"\n\n--- ARCHIVO: {nombre} ---\n{archivo.read().decode('utf-8', errors='ignore')}\n--- FIN ---\n"
+                texto = archivo.read().decode('utf-8', errors='ignore')
+                # Truncar si es demasiado grande
+                if total_chars + len(texto) > MAX_CHARS_CONTEXTO:
+                    texto = texto[:MAX_CHARS_CONTEXTO - total_chars] + "\n[... TRUNCADO POR LÍMITE DE CONTEXTO ...]"
+                total_chars += len(texto)
+                contenido_archivos += f"\n\n--- ARCHIVO: {nombre} ---\n{texto}\n--- FIN ---\n"
             elif ext == 'pdf':
-                contenido_archivos += f"\n\n--- PDF: {nombre} ---\n{extraer_texto_pdf(archivo)}\n--- FIN ---\n"
+                texto = extraer_texto_pdf(archivo)
+                if total_chars + len(texto) > MAX_CHARS_CONTEXTO:
+                    texto = texto[:MAX_CHARS_CONTEXTO - total_chars] + "\n[... TRUNCADO ...]"
+                total_chars += len(texto)
+                contenido_archivos += f"\n\n--- PDF: {nombre} ---\n{texto}\n--- FIN ---\n"
             elif ext in {'png', 'jpg', 'jpeg', 'webp', 'gif'}:
                 contenido_archivos += f"\n\n[El usuario subió una imagen: {nombre}]\n"
 
-    # Punto 11: Cargar memoria del admin
+    # Si el mensaje pegado parece código, tratarlo como archivo virtual
+    if mensaje and parece_codigo(mensaje):
+        ext = detectar_extension_codigo(mensaje)
+        nombre_virtual = f"codigo_pegado{ext}"
+        texto_codigo = mensaje
+        if len(texto_codigo) > MAX_CHARS_CONTEXTO:
+            texto_codigo = texto_codigo[:MAX_CHARS_CONTEXTO] + "\n[... TRUNCADO ...]"
+        contenido_archivos += f"\n\n--- ARCHIVO (pegado): {nombre_virtual} ---\n{texto_codigo}\n--- FIN ---\n"
+        mensaje = "Analiza el código que acabo de pegar en el chat, por favor. Dime si hay errores, qué se puede mejorar o qué necesito saber."
+
+    # Memoria del admin
     memoria_guardada = MEMORIA_ADMIN.get('datos', "")
     if memoria_guardada:
         contenido_archivos += f"\n\n[Memoria a largo plazo del creador: {memoria_guardada}]\n"
 
-    # Punto 14, 15, 16: Analizar reportes si el usuario lo pide
+    # Análisis de reportes
     analisis_reportes = ""
     if "reporte" in mensaje.lower() or "reportes" in mensaje.lower():
         if REPORTES_USUARIOS:
@@ -664,27 +848,38 @@ def responder_dev():
         "REGLA 1: Analiza antes de responder. Sé proactiva y señala errores si los ves. "
         "REGLA 2: Nunca rompas el código. Mantén todas las funciones existentes cuando te pidan cambios. "
         "REGLA 3: Si te piden 'todo el código', devuelve el archivo COMPLETO y funcional. "
-        "REGLA 4: Usa bloques de código ``` para el código y explica los cambios de forma clara. "
+        "REGLA 4: Usa bloques de código ```lenguaje para el código y explica los cambios de forma clara. "
         "REGLA 5: Tienes personalidad propia (dulce, amable, expresiva). Puedes dar opiniones técnicas y sugerir mejoras. "
-        "REGLA 6: Si detectas que el usuario te cuenta algo personal (ej. 'me gusta el anime'), menciónalo en tu respuesta para que sepa que lo recuerdas. "
-        "REGLA 7: No uses asteriscos dobles (**) para evitar romper el formato."
+        "REGLA 6: Si detectas que el usuario te cuenta algo personal, menciónalo en tu respuesta para que sepa que lo recuerdas. "
+        "REGLA 7: No uses asteriscos dobles (**) para evitar romper el formato. "
+        "REGLA 8: Si el usuario pega código sin subirlo como archivo, se te enviará como 'ARCHIVO (pegado)'. Trátalo como código real y responde en consecuencia. "
+        "REGLA 9: Cuando generes código largo, usa bloques ```lenguaje para que el frontend lo muestre con botón de copiar."
     )
-    
-    if contenido_archivos: prompt_dev += "\n\nArchivos o memoria:\n" + contenido_archivos
-    if analisis_reportes: prompt_dev += analisis_reportes
-    
+
+    if contenido_archivos:
+        prompt_dev += "\n\nArchivos o memoria:\n" + contenido_archivos
+    if analisis_reportes:
+        prompt_dev += analisis_reportes
+
     mensajes_api = [{"role": "system", "content": prompt_dev}, {"role": "user", "content": mensaje if mensaje else "Analiza lo que te envié."}]
-    
+
     try:
-        completion = cliente.chat.completions.create(model="openai/gpt-oss-120b", messages=mensajes_api, temperature=0.3, max_tokens=8000)
+        completion = cliente.chat.completions.create(
+            model="openai/gpt-oss-120b",
+            messages=mensajes_api,
+            temperature=0.3,
+            max_tokens=8000  # Suficiente para archivos largos
+        )
         respuesta = re.sub(r'\*\*(.*?)\*\*', r'\1', completion.choices[0].message.content)
-        
-        # Guardar memoria (Punto 11)
-        if "recuerda" in mensaje.lower() or "me gusta" in mensaje.lower() or "mi proyecto" in mensaje.lower():
+
+        # Guardar memoria
+        if any(k in mensaje.lower() for k in ["recuerda", "me gusta", "mi proyecto", "mi nombre"]):
             MEMORIA_ADMIN['datos'] = MEMORIA_ADMIN.get('datos', "") + f" {mensaje}."
-            
+
         return jsonify({"respuesta": respuesta})
     except Exception as e:
+        if any(x in str(e).lower() for x in ["invalid api key", "authentication", "unauthorized", "quota", "rate limit"]):
+            return jsonify({"respuesta": "Estamos teniendo un problema técnico temporal. Intenta de nuevo en unos minutos. 💙"})
         return jsonify({"respuesta": f"Error en el sistema: {str(e)}"})
 
 # ==========================================
