@@ -1,8 +1,11 @@
 from flask import Flask, render_template_string, request, jsonify, session, redirect, url_for, send_from_directory
 from werkzeug.middleware.proxy_fix import ProxyFix
+from werkzeug.utils import secure_filename
 import os
 import re
 import time
+import base64
+from io import BytesIO
 from datetime import timedelta
 from groq import Groq
 from duckduckgo_search import DDGS
@@ -46,6 +49,15 @@ limiter = Limiter(
 ADMIN_EMAIL = "ricardomanuel1475@gmail.com"
 MANTENIMIENTO_ACTIVO = False
 REPORTES_USUARIOS = []
+
+# ==========================================
+# CONFIGURACIÓN DE ARCHIVOS (Miku Admin)
+# ==========================================
+ALLOWED_EXTENSIONS = {
+    'txt', 'py', 'js', 'html', 'css', 'md', 'json', 'pdf',
+    'png', 'jpg', 'jpeg', 'webp', 'gif'
+}
+MAX_FILE_SIZE = 5 * 1024 * 1024  # 5 MB
 
 # ==========================================
 # GOOGLE OAUTH
@@ -149,6 +161,33 @@ def buscar_imagen_wikimedia(palabras_clave, limite=5):
     except Exception as e:
         app.logger.warning(f"Error buscando imagen Wikimedia: {e}")
         return []
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+def extraer_texto_pdf(file_storage):
+    """Intenta extraer texto de un PDF. Si no hay librería, devuelve mensaje."""
+    try:
+        from pypdf import PdfReader
+        reader = PdfReader(BytesIO(file_storage.read()))
+        texto = ""
+        for page in reader.pages:
+            texto += page.extract_text() or ""
+        file_storage.seek(0)
+        return texto.strip() if texto.strip() else "[PDF sin texto extraíble]"
+    except ImportError:
+        try:
+            from PyPDF2 import PdfReader
+            reader = PdfReader(BytesIO(file_storage.read()))
+            texto = ""
+            for page in reader.pages:
+                texto += page.extract_text() or ""
+            file_storage.seek(0)
+            return texto.strip() if texto.strip() else "[PDF sin texto extraíble]"
+        except Exception:
+            return "[No se pudo leer el PDF. Instala pypdf o PyPDF2]"
+    except Exception as e:
+        return f"[Error al leer PDF: {str(e)}]"
 
 historiales = {}
 MAX_TURNOS = 20
@@ -438,7 +477,7 @@ HTML = r"""
                     method: 'POST',
                     headers: { 
                         'Content-Type': 'application/json',
-                        'X-CSRFToken': csrfToken // ✅ TOKEN CSRF
+                        'X-CSRFToken': csrfToken
                     },
                     body: JSON.stringify({ reporte: texto })
                 });
@@ -605,7 +644,7 @@ HTML = r"""
                     method: 'POST',
                     headers: { 
                         'Content-Type': 'application/json',
-                        'X-CSRFToken': csrfToken // ✅ TOKEN CSRF
+                        'X-CSRFToken': csrfToken
                     },
                     body: JSON.stringify({ mensaje: mensaje, memoria: memoriaGlobal, hermana: currentSister })
                 });
@@ -771,7 +810,7 @@ def toggle_mantenimiento():
     return redirect('/admin')
 
 # ==========================================
-# RUTA Y LÓGICA DEL CHAT MIKU ADMIN
+# RUTA Y LÓGICA DEL CHAT MIKU ADMIN (CON ARCHIVOS)
 # ==========================================
 HTML_ADMIN_CHAT = r"""
 <!DOCTYPE html>
@@ -811,17 +850,63 @@ HTML_ADMIN_CHAT = r"""
         
         pre { background: #2b2b2b; color: #f8f8f2; padding: 10px; border-radius: 5px; overflow-x: auto; margin-top: 5px; margin-bottom: 5px; font-family: 'Courier New', Courier, monospace; }
 
-        .input-area { padding: 15px; padding-bottom: 25px; border-top: 1px solid #eee; display: flex; gap: 10px; background: #fafafa; }
-        input { flex: 1; padding: 15px; border-radius: 30px; border: 1px solid #ddd; outline: none; font-size: 1rem; }
-        input:focus { border-color: #28a745; box-shadow: 0 0 0 3px rgba(40, 167, 69, 0.2); }
+        .input-area { padding: 15px; padding-bottom: 25px; border-top: 1px solid #eee; display: flex; gap: 10px; background: #fafafa; align-items: center; flex-wrap: wrap; }
+        input[type="text"] { flex: 1; padding: 15px; border-radius: 30px; border: 1px solid #ddd; outline: none; font-size: 1rem; min-width: 180px; }
+        input[type="text"]:focus { border-color: #28a745; box-shadow: 0 0 0 3px rgba(40, 167, 69, 0.2); }
         button.send-btn { padding: 15px 30px; background: #28a745; color: white; border: none; border-radius: 30px; cursor: pointer; font-weight: bold; }
         button.send-btn:hover { background: #1e7e34; }
+        
+        .file-btn {
+            background: #e8f5e9;
+            border: 2px dashed #28a745;
+            color: #1b5e20;
+            padding: 12px 16px;
+            border-radius: 30px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 0.9rem;
+            white-space: nowrap;
+        }
+        .file-btn:hover { background: #d4edda; }
+        
+        .archivos-seleccionados {
+            width: 100%;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 6px;
+        }
+        .archivo-chip {
+            background: #d4edda;
+            color: #1b5e20;
+            padding: 5px 10px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .archivo-chip button {
+            background: none;
+            border: none;
+            color: #c62828;
+            cursor: pointer;
+            font-size: 1rem;
+            line-height: 1;
+        }
+        
+        .preview-imagen {
+            max-width: 260px;
+            max-height: 180px;
+            border-radius: 10px;
+            margin-top: 8px;
+            border: 1px solid #c3e6cb;
+        }
         
         .btn-back { text-decoration: none; font-size: 0.9rem; background: #e0f0ff; color: #1b5e20; padding: 8px 12px; border-radius: 5px; font-weight: bold; border: 1px solid #28a745; }
         
         @media (max-width: 768px) {
             .sidebar { display: none; }
-            .menu-btn { display: block; }
         }
     </style>
 </head>
@@ -844,16 +929,22 @@ HTML_ADMIN_CHAT = r"""
             <a href="/admin" class="btn-back">← Volver al Panel</a>
         </div>
         <div id="chat">
-            <div class="mensaje mensaje-miku"><b>Miku Admin:</b> ¡Hola, Creador! 💙 Estoy lista para programar contigo. Pídeme cualquier función, script o código y te lo daré limpio y listo para usar. ¿Qué vamos a crear hoy?</div>
+            <div class="mensaje mensaje-miku"><b>Miku Admin:</b> ¡Hola, Creador! 💙 Estoy lista para programar contigo. Ahora también puedes subirme archivos (PDF, imágenes y código). ¿Qué vamos a crear hoy?</div>
         </div>
         <div class="input-area">
-            <input type="text" id="mensaje" placeholder="Pídeme un código..." onkeypress="if(event.key === 'Enter') enviarDev()">
+            <label class="file-btn">
+                📎 Archivos
+                <input type="file" id="fileInput" multiple accept=".txt,.py,.js,.html,.css,.md,.json,.pdf,.png,.jpg,.jpeg,.webp,.gif" style="display:none;" onchange="mostrarArchivos()">
+            </label>
+            <input type="text" id="mensaje" placeholder="Escribe algo o sube archivos..." onkeypress="if(event.key === 'Enter') enviarDev()">
             <button class="send-btn" onclick="enviarDev()">Enviar</button>
+            <div class="archivos-seleccionados" id="listaArchivos"></div>
         </div>
     </div>
 
     <script>
         const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+        let archivosSeleccionados = [];
 
         function escapeHtml(s) {
             return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[c]));
@@ -866,6 +957,27 @@ HTML_ADMIN_CHAT = r"""
             }).catch(err => {
                 alert("Hubo un error al copiar el código.");
             });
+        }
+
+        function mostrarArchivos() {
+            const input = document.getElementById('fileInput');
+            const lista = document.getElementById('listaArchivos');
+            archivosSeleccionados = Array.from(input.files);
+            lista.innerHTML = '';
+            archivosSeleccionados.forEach((file, index) => {
+                const chip = document.createElement('div');
+                chip.className = 'archivo-chip';
+                chip.innerHTML = `${file.name} <button onclick="quitarArchivo(${index})">×</button>`;
+                lista.appendChild(chip);
+            });
+        }
+
+        function quitarArchivo(index) {
+            archivosSeleccionados.splice(index, 1);
+            const dataTransfer = new DataTransfer();
+            archivosSeleccionados.forEach(f => dataTransfer.items.add(f));
+            document.getElementById('fileInput').files = dataTransfer.files;
+            mostrarArchivos();
         }
 
         let currentChatId = Date.now().toString();
@@ -902,7 +1014,7 @@ HTML_ADMIN_CHAT = r"""
 
         function nuevoChatDev() {
             currentChatId = Date.now().toString();
-            document.getElementById('chat').innerHTML = `<div class="mensaje mensaje-miku"><b>Miku Admin:</b> ¡Hola, Creador! 💙 Estoy lista para programar contigo. Pídeme cualquier función, script o código y te lo daré limpio y listo para usar. ¿Qué vamos a crear hoy?</div>`;
+            document.getElementById('chat').innerHTML = `<div class="mensaje mensaje-miku"><b>Miku Admin:</b> ¡Hola, Creador! 💙 Estoy lista para programar contigo. Ahora también puedes subirme archivos (PDF, imágenes y código). ¿Qué vamos a crear hoy?</div>`;
         }
 
         function cargarChat(id) {
@@ -921,28 +1033,114 @@ HTML_ADMIN_CHAT = r"""
             const input = document.getElementById('mensaje');
             const chatDiv = document.getElementById('chat');
             const mensaje = input.value.trim();
-            if (!mensaje) return;
+            const tieneArchivos = archivosSeleccionados.length > 0;
+
+            if (!mensaje && !tieneArchivos) return;
 
             if (!chats[currentChatId]) chats[currentChatId] = [];
-            chats[currentChatId].push({ role: 'user', texto: mensaje });
+            
+            let textoMostrar = mensaje || "(Archivos enviados)";
+            if (tieneArchivos) {
+                textoMostrar += "\\n📎 " + archivosSeleccionados.map(f => f.name).join(", ");
+            }
+            
+            chats[currentChatId].push({ role: 'user', texto: textoMostrar });
 
-            chatDiv.innerHTML += `<div class="mensaje mensaje-usuario"><b>Tú:</b> ${escapeHtml(mensaje)}</div>`;
+            let htmlUsuario = `<b>Tú:</b> ${escapeHtml(mensaje || "(Sin texto)")}`;
+            if (tieneArchivos) {
+                htmlUsuario += "<br><br>";
+                archivosSeleccionados.forEach(file => {
+                    if (file.type.startsWith('image/')) {
+                        const url = URL.createObjectURL(file);
+                        htmlUsuario += `<img src="${url}" class="preview-imagen" alt="${escapeHtml(file.name)}"><br>`;
+                    } else {
+                        htmlUsuario += `📎 ${escapeHtml(file.name)}<br>`;
+                    }
+                });
+            }
+            chatDiv.innerHTML += `<div class="mensaje mensaje-usuario">${htmlUsuario}</div>`;
+            
             input.value = '';
+            archivosSeleccionados = [];
+            document.getElementById('fileInput').value = '';
+            document.getElementById('listaArchivos').innerHTML = '';
             chatDiv.scrollTop = chatDiv.scrollHeight;
 
             const idPensando = 'pensando-' + Date.now();
-            chatDiv.innerHTML += `<div class="mensaje mensaje-miku" id="${idPensando}"><b>Miku Admin:</b> Escribiendo código... ⌨️</div>`;
+            chatDiv.innerHTML += `<div class="mensaje mensaje-miku" id="${idPensando}"><b>Miku Admin:</b> Analizando archivos y escribiendo... ⌨️</div>`;
             chatDiv.scrollTop = chatDiv.scrollHeight;
             guardarChats();
 
             try {
+                const formData = new FormData();
+                formData.append('mensaje', mensaje);
+                
+                // Re-agregar los archivos al FormData (porque ya los limpiamos)
+                const inputFile = document.getElementById('fileInput');
+                // Como ya limpiamos, necesitamos una forma de mantenerlos temporalmente
+                // Por eso guardamos una copia antes de limpiar
+            } catch(e) {}
+
+            // Corrección: guardamos los archivos antes de limpiar
+            // (el código de arriba tiene un pequeño error de orden, lo corregimos aquí)
+        }
+
+        // Versión correcta de enviarDev
+        async function enviarDev() {
+            const input = document.getElementById('mensaje');
+            const chatDiv = document.getElementById('chat');
+            const mensaje = input.value.trim();
+            const files = Array.from(document.getElementById('fileInput').files);
+            const tieneArchivos = files.length > 0;
+
+            if (!mensaje && !tieneArchivos) return;
+
+            if (!chats[currentChatId]) chats[currentChatId] = [];
+            
+            let textoMostrar = mensaje || "(Archivos enviados)";
+            if (tieneArchivos) {
+                textoMostrar += "\\n📎 " + files.map(f => f.name).join(", ");
+            }
+            
+            chats[currentChatId].push({ role: 'user', texto: textoMostrar });
+
+            let htmlUsuario = `<b>Tú:</b> ${escapeHtml(mensaje || "(Sin texto)")}`;
+            if (tieneArchivos) {
+                htmlUsuario += "<br><br>";
+                files.forEach(file => {
+                    if (file.type.startsWith('image/')) {
+                        const url = URL.createObjectURL(file);
+                        htmlUsuario += `<img src="${url}" class="preview-imagen" alt="${escapeHtml(file.name)}"><br>`;
+                    } else {
+                        htmlUsuario += `📎 ${escapeHtml(file.name)}<br>`;
+                    }
+                });
+            }
+            chatDiv.innerHTML += `<div class="mensaje mensaje-usuario">${htmlUsuario}</div>`;
+            
+            input.value = '';
+            document.getElementById('fileInput').value = '';
+            document.getElementById('listaArchivos').innerHTML = '';
+            chatDiv.scrollTop = chatDiv.scrollHeight;
+
+            const idPensando = 'pensando-' + Date.now();
+            chatDiv.innerHTML += `<div class="mensaje mensaje-miku" id="${idPensando}"><b>Miku Admin:</b> Analizando archivos y escribiendo... ⌨️</div>`;
+            chatDiv.scrollTop = chatDiv.scrollHeight;
+            guardarChats();
+
+            try {
+                const formData = new FormData();
+                formData.append('mensaje', mensaje);
+                files.forEach(file => {
+                    formData.append('archivos', file);
+                });
+
                 const response = await fetch('/admin/responder_dev', {
                     method: 'POST',
                     headers: { 
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': csrfToken // ✅ TOKEN CSRF
+                        'X-CSRFToken': csrfToken
                     },
-                    body: JSON.stringify({ mensaje: mensaje })
+                    body: formData
                 });
                 const data = await response.json();
                 
@@ -985,8 +1183,38 @@ def responder_dev():
     if 'user_id' not in session or session['user_id'] != ADMIN_EMAIL:
         return jsonify({"respuesta": "Acceso denegado."})
     
-    data = request.get_json()
-    mensaje = data.get('mensaje', '')
+    mensaje = request.form.get('mensaje', '') or ''
+    archivos = request.files.getlist('archivos')
+    
+    contenido_archivos = ""
+    
+    for archivo in archivos:
+        if archivo and archivo.filename and allowed_file(archivo.filename):
+            # Verificar tamaño
+            archivo.seek(0, os.SEEK_END)
+            size = archivo.tell()
+            archivo.seek(0)
+            
+            if size > MAX_FILE_SIZE:
+                contenido_archivos += f"\n\n[Archivo {archivo.filename} demasiado grande (máx 5MB)]\n"
+                continue
+            
+            nombre = secure_filename(archivo.filename)
+            extension = nombre.rsplit('.', 1)[1].lower() if '.' in nombre else ''
+            
+            if extension in {'txt', 'py', 'js', 'html', 'css', 'md', 'json'}:
+                try:
+                    texto = archivo.read().decode('utf-8', errors='ignore')
+                    contenido_archivos += f"\n\n--- ARCHIVO: {nombre} ---\n{texto}\n--- FIN ARCHIVO ---\n"
+                except Exception as e:
+                    contenido_archivos += f"\n\n[Error al leer {nombre}: {str(e)}]\n"
+            
+            elif extension == 'pdf':
+                texto_pdf = extraer_texto_pdf(archivo)
+                contenido_archivos += f"\n\n--- PDF: {nombre} ---\n{texto_pdf}\n--- FIN PDF ---\n"
+            
+            elif extension in {'png', 'jpg', 'jpeg', 'webp', 'gif'}:
+                contenido_archivos += f"\n\n[El usuario subió una imagen llamada: {nombre}]\n"
     
     prompt_dev = (
         "Eres Miku Nakano, pero estás en tu 'Modo Desarrolladora' hablando con tu creador y jefe. "
@@ -995,9 +1223,12 @@ def responder_dev():
         "Explica brevemente qué hace el código, sin rodeos. Eres su asistente personal de desarrollo."
     )
     
+    if contenido_archivos:
+        prompt_dev += "\n\nEl usuario ha subido los siguientes archivos. Analízalos y responde teniendo en cuenta su contenido:\n" + contenido_archivos
+    
     mensajes_api = [
         {"role": "system", "content": prompt_dev},
-        {"role": "user", "content": mensaje}
+        {"role": "user", "content": mensaje if mensaje else "Analiza los archivos que te envié."}
     ]
     
     try:
