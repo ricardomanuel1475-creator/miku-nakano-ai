@@ -810,7 +810,7 @@ def toggle_mantenimiento():
     return redirect('/admin')
 
 # ==========================================
-# RUTA Y LÓGICA DEL CHAT MIKU ADMIN (CON ARCHIVOS)
+# RUTA Y LÓGICA DEL CHAT MIKU ADMIN (CON ARCHIVOS + PEGAR CAPTURAS)
 # ==========================================
 HTML_ADMIN_CHAT = r"""
 <!DOCTYPE html>
@@ -929,14 +929,14 @@ HTML_ADMIN_CHAT = r"""
             <a href="/admin" class="btn-back">← Volver al Panel</a>
         </div>
         <div id="chat">
-            <div class="mensaje mensaje-miku"><b>Miku Admin:</b> ¡Hola, Creador! 💙 Estoy lista para programar contigo. Ahora también puedes subirme archivos (PDF, imágenes y código). ¿Qué vamos a crear hoy?</div>
+            <div class="mensaje mensaje-miku"><b>Miku Admin:</b> ¡Hola, Creador! 💙 Estoy lista para programar contigo. Puedes subirme archivos o pegar capturas de pantalla (Ctrl+V). ¿En qué te ayudo hoy?</div>
         </div>
         <div class="input-area">
             <label class="file-btn">
                 📎 Archivos
                 <input type="file" id="fileInput" multiple accept=".txt,.py,.js,.html,.css,.md,.json,.pdf,.png,.jpg,.jpeg,.webp,.gif" style="display:none;" onchange="mostrarArchivos()">
             </label>
-            <input type="text" id="mensaje" placeholder="Escribe algo o sube archivos..." onkeypress="if(event.key === 'Enter') enviarDev()">
+            <input type="text" id="mensaje" placeholder="Escribe algo, sube archivos o pega una captura (Ctrl+V)..." onkeypress="if(event.key === 'Enter') enviarDev()">
             <button class="send-btn" onclick="enviarDev()">Enviar</button>
             <div class="archivos-seleccionados" id="listaArchivos"></div>
         </div>
@@ -944,7 +944,7 @@ HTML_ADMIN_CHAT = r"""
 
     <script>
         const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
-        let archivosSeleccionados = [];
+        let archivosTemporales = [];  // Aquí guardamos tanto archivos del input como los pegados
 
         function escapeHtml(s) {
             return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[c]));
@@ -961,24 +961,45 @@ HTML_ADMIN_CHAT = r"""
 
         function mostrarArchivos() {
             const input = document.getElementById('fileInput');
+            const nuevos = Array.from(input.files);
+            nuevos.forEach(f => archivosTemporales.push(f));
+            actualizarListaArchivos();
+        }
+
+        function actualizarListaArchivos() {
             const lista = document.getElementById('listaArchivos');
-            archivosSeleccionados = Array.from(input.files);
             lista.innerHTML = '';
-            archivosSeleccionados.forEach((file, index) => {
+            archivosTemporales.forEach((file, index) => {
                 const chip = document.createElement('div');
                 chip.className = 'archivo-chip';
-                chip.innerHTML = `${file.name} <button onclick="quitarArchivo(${index})">×</button>`;
+                chip.innerHTML = `${file.name || 'Captura.png'} <button onclick="quitarArchivo(${index})">×</button>`;
                 lista.appendChild(chip);
             });
         }
 
         function quitarArchivo(index) {
-            archivosSeleccionados.splice(index, 1);
-            const dataTransfer = new DataTransfer();
-            archivosSeleccionados.forEach(f => dataTransfer.items.add(f));
-            document.getElementById('fileInput').files = dataTransfer.files;
-            mostrarArchivos();
+            archivosTemporales.splice(index, 1);
+            actualizarListaArchivos();
         }
+
+        // ✅ PEGAR CAPTURAS DE PANTALLA (Ctrl + V)
+        document.addEventListener('paste', function(e) {
+            const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+            for (let item of items) {
+                if (item.type.indexOf('image') !== -1) {
+                    e.preventDefault();
+                    const blob = item.getAsFile();
+                    const file = new File([blob], `captura_${Date.now()}.png`, { type: blob.type });
+                    archivosTemporales.push(file);
+                    actualizarListaArchivos();
+                    
+                    // Feedback visual
+                    const chatDiv = document.getElementById('chat');
+                    chatDiv.innerHTML += `<div class="mensaje mensaje-miku" style="background:#e8f5e9; border-color:#c3e6cb; color:#155724; font-size:0.85rem;"><b>Sistema:</b> Captura pegada correctamente 📎</div>`;
+                    chatDiv.scrollTop = chatDiv.scrollHeight;
+                }
+            }
+        });
 
         let currentChatId = Date.now().toString();
         let chats = JSON.parse(localStorage.getItem('miku_dev_chats')) || {};
@@ -1014,7 +1035,7 @@ HTML_ADMIN_CHAT = r"""
 
         function nuevoChatDev() {
             currentChatId = Date.now().toString();
-            document.getElementById('chat').innerHTML = `<div class="mensaje mensaje-miku"><b>Miku Admin:</b> ¡Hola, Creador! 💙 Estoy lista para programar contigo. Ahora también puedes subirme archivos (PDF, imágenes y código). ¿Qué vamos a crear hoy?</div>`;
+            document.getElementById('chat').innerHTML = `<div class="mensaje mensaje-miku"><b>Miku Admin:</b> ¡Hola, Creador! 💙 Estoy lista para programar contigo. Puedes subirme archivos o pegar capturas de pantalla (Ctrl+V). ¿En qué te ayudo hoy?</div>`;
         }
 
         function cargarChat(id) {
@@ -1033,73 +1054,16 @@ HTML_ADMIN_CHAT = r"""
             const input = document.getElementById('mensaje');
             const chatDiv = document.getElementById('chat');
             const mensaje = input.value.trim();
-            const tieneArchivos = archivosSeleccionados.length > 0;
-
-            if (!mensaje && !tieneArchivos) return;
-
-            if (!chats[currentChatId]) chats[currentChatId] = [];
-            
-            let textoMostrar = mensaje || "(Archivos enviados)";
-            if (tieneArchivos) {
-                textoMostrar += "\\n📎 " + archivosSeleccionados.map(f => f.name).join(", ");
-            }
-            
-            chats[currentChatId].push({ role: 'user', texto: textoMostrar });
-
-            let htmlUsuario = `<b>Tú:</b> ${escapeHtml(mensaje || "(Sin texto)")}`;
-            if (tieneArchivos) {
-                htmlUsuario += "<br><br>";
-                archivosSeleccionados.forEach(file => {
-                    if (file.type.startsWith('image/')) {
-                        const url = URL.createObjectURL(file);
-                        htmlUsuario += `<img src="${url}" class="preview-imagen" alt="${escapeHtml(file.name)}"><br>`;
-                    } else {
-                        htmlUsuario += `📎 ${escapeHtml(file.name)}<br>`;
-                    }
-                });
-            }
-            chatDiv.innerHTML += `<div class="mensaje mensaje-usuario">${htmlUsuario}</div>`;
-            
-            input.value = '';
-            archivosSeleccionados = [];
-            document.getElementById('fileInput').value = '';
-            document.getElementById('listaArchivos').innerHTML = '';
-            chatDiv.scrollTop = chatDiv.scrollHeight;
-
-            const idPensando = 'pensando-' + Date.now();
-            chatDiv.innerHTML += `<div class="mensaje mensaje-miku" id="${idPensando}"><b>Miku Admin:</b> Analizando archivos y escribiendo... ⌨️</div>`;
-            chatDiv.scrollTop = chatDiv.scrollHeight;
-            guardarChats();
-
-            try {
-                const formData = new FormData();
-                formData.append('mensaje', mensaje);
-                
-                // Re-agregar los archivos al FormData (porque ya los limpiamos)
-                const inputFile = document.getElementById('fileInput');
-                // Como ya limpiamos, necesitamos una forma de mantenerlos temporalmente
-                // Por eso guardamos una copia antes de limpiar
-            } catch(e) {}
-
-            // Corrección: guardamos los archivos antes de limpiar
-            // (el código de arriba tiene un pequeño error de orden, lo corregimos aquí)
-        }
-
-        // Versión correcta de enviarDev
-        async function enviarDev() {
-            const input = document.getElementById('mensaje');
-            const chatDiv = document.getElementById('chat');
-            const mensaje = input.value.trim();
-            const files = Array.from(document.getElementById('fileInput').files);
+            const files = [...archivosTemporales];
             const tieneArchivos = files.length > 0;
 
             if (!mensaje && !tieneArchivos) return;
 
             if (!chats[currentChatId]) chats[currentChatId] = [];
             
-            let textoMostrar = mensaje || "(Archivos enviados)";
+            let textoMostrar = mensaje || "(Archivos / capturas enviadas)";
             if (tieneArchivos) {
-                textoMostrar += "\\n📎 " + files.map(f => f.name).join(", ");
+                textoMostrar += "\\n📎 " + files.map(f => f.name || "captura.png").join(", ");
             }
             
             chats[currentChatId].push({ role: 'user', texto: textoMostrar });
@@ -1108,23 +1072,24 @@ HTML_ADMIN_CHAT = r"""
             if (tieneArchivos) {
                 htmlUsuario += "<br><br>";
                 files.forEach(file => {
-                    if (file.type.startsWith('image/')) {
+                    if (file.type && file.type.startsWith('image/')) {
                         const url = URL.createObjectURL(file);
-                        htmlUsuario += `<img src="${url}" class="preview-imagen" alt="${escapeHtml(file.name)}"><br>`;
+                        htmlUsuario += `<img src="${url}" class="preview-imagen" alt="${escapeHtml(file.name || 'captura')}"><br>`;
                     } else {
-                        htmlUsuario += `📎 ${escapeHtml(file.name)}<br>`;
+                        htmlUsuario += `📎 ${escapeHtml(file.name || 'archivo')}<br>`;
                     }
                 });
             }
             chatDiv.innerHTML += `<div class="mensaje mensaje-usuario">${htmlUsuario}</div>`;
             
             input.value = '';
+            archivosTemporales = [];
             document.getElementById('fileInput').value = '';
             document.getElementById('listaArchivos').innerHTML = '';
             chatDiv.scrollTop = chatDiv.scrollHeight;
 
             const idPensando = 'pensando-' + Date.now();
-            chatDiv.innerHTML += `<div class="mensaje mensaje-miku" id="${idPensando}"><b>Miku Admin:</b> Analizando archivos y escribiendo... ⌨️</div>`;
+            chatDiv.innerHTML += `<div class="mensaje mensaje-miku" id="${idPensando}"><b>Miku Admin:</b> Analizando... ⌨️</div>`;
             chatDiv.scrollTop = chatDiv.scrollHeight;
             guardarChats();
 
@@ -1145,6 +1110,10 @@ HTML_ADMIN_CHAT = r"""
                 const data = await response.json();
                 
                 let respuestaHTML = data.respuesta;
+                
+                // Limpiamos posibles asteriscos residuales por si acaso
+                respuestaHTML = respuestaHTML.replace(/\*\*(.*?)\*\*/g, '$1');
+                
                 respuestaHTML = respuestaHTML.replace(/```(.*?)```/gs, (match, codigo) => {
                     const idBoton = 'copiar-' + Math.floor(Math.random() * 100000);
                     const codigoSeguro = codigo.replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -1190,7 +1159,6 @@ def responder_dev():
     
     for archivo in archivos:
         if archivo and archivo.filename and allowed_file(archivo.filename):
-            # Verificar tamaño
             archivo.seek(0, os.SEEK_END)
             size = archivo.tell()
             archivo.seek(0)
@@ -1214,21 +1182,25 @@ def responder_dev():
                 contenido_archivos += f"\n\n--- PDF: {nombre} ---\n{texto_pdf}\n--- FIN PDF ---\n"
             
             elif extension in {'png', 'jpg', 'jpeg', 'webp', 'gif'}:
-                contenido_archivos += f"\n\n[El usuario subió una imagen llamada: {nombre}]\n"
+                contenido_archivos += f"\n\n[El usuario subió o pegó una imagen llamada: {nombre}]\n"
     
+    # Prompt mejorado: respuestas limpias, sin asteriscos
     prompt_dev = (
-        "Eres Miku Nakano, pero estás en tu 'Modo Desarrolladora' hablando con tu creador y jefe. "
-        "Tu única misión es ayudarlo a programar. Responde de forma técnica, directa y muy amable. "
-        "Cuando te pida código (Python, HTML, CSS, JS, etc.), entrégalo SIEMPRE dentro de bloques de código usando tres comillas invertidas (```). "
-        "Explica brevemente qué hace el código, sin rodeos. Eres su asistente personal de desarrollo."
+        "Eres Miku Nakano en modo Desarrolladora, hablando con tu creador. "
+        "Tu estilo de respuesta debe ser limpio, natural y profesional, igual que un buen asistente de programación. "
+        "NUNCA uses asteriscos para poner texto en negrita (nada de **texto**). "
+        "No uses markdown de negrita ni de cursiva innecesario. "
+        "Escribe de forma clara, directa y amable. "
+        "Cuando entregues código, ponlo siempre dentro de bloques con tres comillas invertidas. "
+        "Explica de forma sencilla y limpia. Habla como si estuvieras ayudando a un amigo programador de forma natural."
     )
     
     if contenido_archivos:
-        prompt_dev += "\n\nEl usuario ha subido los siguientes archivos. Analízalos y responde teniendo en cuenta su contenido:\n" + contenido_archivos
+        prompt_dev += "\n\nEl usuario ha subido o pegado los siguientes archivos. Analízalos y responde teniendo en cuenta su contenido:\n" + contenido_archivos
     
     mensajes_api = [
         {"role": "system", "content": prompt_dev},
-        {"role": "user", "content": mensaje if mensaje else "Analiza los archivos que te envié."}
+        {"role": "user", "content": mensaje if mensaje else "Analiza los archivos o capturas que te envié."}
     ]
     
     try:
@@ -1238,7 +1210,10 @@ def responder_dev():
             temperature=0.3,
             max_tokens=4000
         )
-        return jsonify({"respuesta": completion.choices[0].message.content})
+        respuesta = completion.choices[0].message.content
+        # Limpieza extra por si el modelo se le escapa algún **
+        respuesta = re.sub(r'\*\*(.*?)\*\*', r'\1', respuesta)
+        return jsonify({"respuesta": respuesta})
     except Exception as e:
         return jsonify({"respuesta": f"Error en el sistema: {str(e)}"})
 
