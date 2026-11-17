@@ -9,6 +9,7 @@ from duckduckgo_search import DDGS
 from authlib.integrations.flask_client import OAuth
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
+from flask_wtf.csrf import CSRFProtect, generate_csrf
 
 # Cargar .env en local (en Render usa sus env vars, no hace nada)
 try:
@@ -30,7 +31,10 @@ app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
 
 app.secret_key = os.environ.get('SECRET_KEY', 'MikuNakanoEsLaMejorAsistente2026')
 
-# ✅ RATE LIMITING (Límite de peticiones)
+# ✅ PROTECCIÓN CSRF
+csrf = CSRFProtect(app)
+
+# ✅ RATE LIMITING
 limiter = Limiter(
     get_remote_address,
     app=app,
@@ -158,6 +162,9 @@ HTML = r"""
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#4aa3df">
     
+    <!-- ✅ TOKEN CSRF -->
+    <meta name="csrf-token" content="{{ csrf_token }}">
+
     <link rel="preload" as="image" href="/static/carga.png" media="(orientation: portrait)">
     <link rel="preload" as="image" href="/static/carga_pc.png" media="(orientation: landscape)">
 
@@ -334,7 +341,6 @@ HTML = r"""
             </div>
             <div style="display: flex; align-items: center; gap: 10px;">
                 {% if is_admin %}
-                <!-- 🔔 LA CAMPANITA DE NOTIFICACIONES -->
                 <a href="/admin" style="text-decoration: none; font-size: 1.2rem; background: #e0f0ff; padding: 8px; border-radius: 50%; border: 1px solid #4aa3df; position: relative;" title="Panel de Administrador">
                     🛠️
                     {% if reportes_nuevos > 0 %}
@@ -357,6 +363,9 @@ HTML = r"""
     </div>
 
     <script>
+        // ✅ OBTENER TOKEN CSRF
+        const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+
         function escapeHtml(s) {
             return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[c]));
         }
@@ -369,7 +378,6 @@ HTML = r"""
         const textoPorcentaje = document.getElementById('texto-porcentaje');
         let progreso = 0;
         
-        // ✅ LÓGICA DE CARGA SINCRONIZADA A 15 SEGUNDOS
         const duracionCarga = 15000; 
         const intervaloProgreso = 100; 
         const pasosTotales = duracionCarga / intervaloProgreso;
@@ -428,7 +436,10 @@ HTML = r"""
             try {
                 const res = await fetch('/reportar', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': csrfToken // ✅ TOKEN CSRF
+                    },
                     body: JSON.stringify({ reporte: texto })
                 });
                 if (res.ok) {
@@ -592,7 +603,10 @@ HTML = r"""
             try {
                 const response = await fetch('/responder', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': csrfToken // ✅ TOKEN CSRF
+                    },
                     body: JSON.stringify({ mensaje: mensaje, memoria: memoriaGlobal, hermana: currentSister })
                 });
                 const data = await response.json();
@@ -651,7 +665,11 @@ def index():
     user_name = str(session['user'].get('name', 'Usuario'))
     is_admin = (session.get('user_id') == ADMIN_EMAIL)
     reportes_nuevos = len(REPORTES_USUARIOS)
-    return render_template_string(HTML, user_name=user_name, is_admin=is_admin, reportes_nuevos=reportes_nuevos)
+    
+    # ✅ Generar token CSRF
+    csrf_token = generate_csrf()
+    
+    return render_template_string(HTML, user_name=user_name, is_admin=is_admin, reportes_nuevos=reportes_nuevos, csrf_token=csrf_token)
 
 @app.route('/login')
 def login():
@@ -717,9 +735,12 @@ def admin_panel():
         <div style="background: white; padding: 20px; border-radius: 10px; margin-top: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
             <h3>Control de Mantenimiento</h3>
             <p style="font-size:0.9rem; color:#555;">Si activas el mantenimiento, la app se cerrará para los usuarios, pero tú podrás seguir navegando.</p>
-            <a href="/toggle_mantenimiento" style="display: inline-block; padding: 10px 20px; background: {'#ff4d4d' if MANTENIMIENTO_ACTIVO else '#4aa3df'}; color: white; text-decoration: none; border-radius: 5px; font-weight: bold;">
-                {'Desactivar Mantenimiento' if MANTENIMIENTO_ACTIVO else 'Activar Mantenimiento'}
-            </a>
+            <form action="/toggle_mantenimiento" method="POST">
+                <input type="hidden" name="csrf_token" value="{generate_csrf()}">
+                <button type="submit" style="padding: 10px 20px; background: {'#ff4d4d' if MANTENIMIENTO_ACTIVO else '#4aa3df'}; color: white; border: none; border-radius: 5px; font-weight: bold; cursor: pointer;">
+                    {'Desactivar Mantenimiento' if MANTENIMIENTO_ACTIVO else 'Activar Mantenimiento'}
+                </button>
+            </form>
         </div>
 
         <!-- NUEVO BOTÓN PARA IR AL CHAT DE MIKU ADMIN -->
@@ -741,7 +762,7 @@ def admin_panel():
     </html>
     """
 
-@app.route('/toggle_mantenimiento')
+@app.route('/toggle_mantenimiento', methods=['POST'])
 def toggle_mantenimiento():
     if 'user_id' not in session or session['user_id'] != ADMIN_EMAIL:
         return redirect('/')
@@ -750,7 +771,7 @@ def toggle_mantenimiento():
     return redirect('/admin')
 
 # ==========================================
-# RUTA Y LÓGICA DEL CHAT MIKU ADMIN (DISEÑO COMPLETO)
+# RUTA Y LÓGICA DEL CHAT MIKU ADMIN
 # ==========================================
 HTML_ADMIN_CHAT = r"""
 <!DOCTYPE html>
@@ -758,11 +779,11 @@ HTML_ADMIN_CHAT = r"""
 <head>
     <title>Miku Admin</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token }}">
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: 'Segoe UI', Arial, sans-serif; background-color: #e8f5e9; display: flex; height: 100dvh; overflow: hidden; }
         
-        /* Barra lateral verde */
         .sidebar { width: 320px; background: linear-gradient(180deg, #d4edda 0%, #a3d9a5 100%); display: flex; flex-direction: column; padding: 15px; border-right: 2px solid #8bc34a; flex-shrink: 0; overflow: hidden; }
         .profile-header { display: flex; flex-direction: column; align-items: center; padding-bottom: 15px; border-bottom: 1px solid #8bc34a; margin-bottom: 15px; flex-shrink: 0; }
         .profile-header img { width: 180px; height: 180px; object-fit: cover; border-radius: 25px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); border: 4px solid #fff; }
@@ -780,7 +801,6 @@ HTML_ADMIN_CHAT = r"""
         #historyList::-webkit-scrollbar { width: 5px; }
         #historyList::-webkit-scrollbar-thumb { background: #a3d9a5; border-radius: 5px; }
         
-        /* Chat principal */
         .main-chat { flex: 1; display: flex; flex-direction: column; background: #ffffff; position: relative; }
         .chat-header { padding: 20px; border-bottom: 1px solid #eee; color: #1b5e20; font-weight: bold; font-size: 1.2rem; display: flex; align-items: center; justify-content: space-between; background: #f1f8e9; }
         #chat { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 15px; }
@@ -789,7 +809,6 @@ HTML_ADMIN_CHAT = r"""
         .mensaje-miku { align-self: flex-start; background: #f1f8e9; color: #1b3a4b; border-bottom-left-radius: 2px; border: 1px solid #c3e6cb; }
         .mensaje-miku b { color: #1b5e20; }
         
-        /* Formato para bloques de código */
         pre { background: #2b2b2b; color: #f8f8f2; padding: 10px; border-radius: 5px; overflow-x: auto; margin-top: 5px; margin-bottom: 5px; font-family: 'Courier New', Courier, monospace; }
 
         .input-area { padding: 15px; padding-bottom: 25px; border-top: 1px solid #eee; display: flex; gap: 10px; background: #fafafa; }
@@ -834,6 +853,8 @@ HTML_ADMIN_CHAT = r"""
     </div>
 
     <script>
+        const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+
         function escapeHtml(s) {
             return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[c]));
         }
@@ -917,7 +938,10 @@ HTML_ADMIN_CHAT = r"""
             try {
                 const response = await fetch('/admin/responder_dev', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': csrfToken // ✅ TOKEN CSRF
+                    },
                     body: JSON.stringify({ mensaje: mensaje })
                 });
                 const data = await response.json();
@@ -953,7 +977,7 @@ HTML_ADMIN_CHAT = r"""
 def miku_dev_chat():
     if 'user_id' not in session or session['user_id'] != ADMIN_EMAIL:
         return "Acceso denegado.", 403
-    return render_template_string(HTML_ADMIN_CHAT)
+    return render_template_string(HTML_ADMIN_CHAT, csrf_token=generate_csrf())
 
 @app.route('/admin/responder_dev', methods=['POST'])
 @limiter.limit("15 per minute")
@@ -1005,7 +1029,6 @@ def responder():
     if not isinstance(mensaje, str) or not mensaje.strip(): return jsonify({"respuesta": "Por favor, escribe un mensaje. 💙"})
     if len(mensaje) > 2000: return jsonify({"respuesta": "Tu mensaje es muy largo. 💙"})
 
-    # 🚫 BLOQUEO DE CÓDIGO PARA USUARIOS NORMALES
     if es_peticion_de_codigo(mensaje):
         return jsonify({"respuesta": f"Lo siento mucho... 🥺 <b>{hermana}</b> y sus hermanas aún no tienen la capacidad de programar o generar códigos. Esa función exclusiva llegará muy pronto a la aplicación. ¡Pero puedo ayudarte con historia, matemáticas, idiomas y mucho más! 💙🌸"})
 
