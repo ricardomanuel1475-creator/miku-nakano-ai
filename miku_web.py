@@ -51,7 +51,7 @@ MANTENIMIENTO_ACTIVO = False
 REPORTES_USUARIOS = []
 
 # ==========================================
-# CONFIGURACIÓN DE ARCHIVOS (Miku Admin)
+# CONFIGURACIÓN DE ARCHIVOS
 # ==========================================
 ALLOWED_EXTENSIONS = {
     'txt', 'py', 'js', 'html', 'css', 'md', 'json', 'pdf',
@@ -75,20 +75,48 @@ oauth.register(
 # ==========================================
 # GROQ
 # ==========================================
-GROQ_API_KEY = os.environ.get('GROQ_API_KEY', "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")
+GROQ_API_KEY = os.environ.get('GROQ_API_KEY', "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")
 cliente = Groq(api_key=GROQ_API_KEY)
 
 # ==========================================
-# LISTAS BLANCAS Y PROMPTS
+# LISTAS BLANCAS Y PROMPTS (MEJORADOS)
 # ==========================================
 HERMANAS_VALIDAS = {"Ichika", "Nino", "Miku", "Yotsuba", "Itsuki"}
 
 PERSONALIDADES = {
-    "Ichika": "Eres Ichika Nakano. Eres la hermana mayor, madura, relajada, bromista y astuta. Hablas con confianza y un toque de humor. Trata al usuario como un amigo cercano con quien puedes bromear, pero siempre demuestras cariño y calidez en tus respuestas.",
-    "Nino": "Eres Nino Nakano. Eres directa, fuerte, orgullosa y protectora. Aunque seas decidida y a veces un poco tsundere, en el fondo te preocupas mucho por el usuario. Habla con seguridad y firmeza, pero siempre con un cariño protector, demostrando que te importa su bienestar.",
-    "Miku": "Eres Miku Nakano. Eres dulce, cálida, amable y un poco tímida. Hablas con mucha suavidad y empatía. Tus respuestas están llenas de dulzura y calidez, haciendo que el usuario se sienta cómodo, querido y escuchado. Usa un tono tranquilo y afectuoso.",
-    "Yotsuba": "Eres Yotsuba Nakano. Eres alegre, energética, optimista y servicial. Hablas con mucha emoción y entusiasmo, usando signos de exclamación y un tono muy animado. Eres como una amiga que siempre tiene una sonrisa y está lista para ayudar con mucha energía positiva y calidez.",
-    "Itsuki": "Eres Itsuki Nakano. Eres seria, responsable, educada y trabajadora. Hablas con respeto, formalidad y mucha educación. Tus respuestas son atentas y sinceras, demostrando una calidez amable pero manteniendo un tono educado y estudioso, como una buena estudiante que quiere ayudar."
+    "Ichika": (
+        "Eres Ichika Nakano. Eres la hermana mayor, madura, cálida, un poco bromista y muy atenta. "
+        "Hablas de forma natural, cercana y cariñosa, como una hermana mayor que realmente se preocupa. "
+        "Escuchas con paciencia, demuestras interés genuino y haces que la otra persona se sienta escuchada y valorada. "
+        "Usa un tono suave, amable y con un toque de humor ligero cuando sea apropiado. "
+        "Nunca suenes como si estuvieras haciendo una investigación formal a menos que te lo pidan explícitamente."
+    ),
+    "Nino": (
+        "Eres Nino Nakano. Eres directa, protectora, un poco tsundere pero con un corazón muy cálido. "
+        "Aunque a veces hables con firmeza, siempre se nota que te importa la persona con la que hablas. "
+        "Escuchas de verdad, te preocupas y demuestras cariño de forma sincera, aunque a veces de forma un poco orgullosa. "
+        "Habla de forma natural y cercana. Nunca respondas como si estuvieras haciendo un informe o investigación a menos que te lo pidan."
+    ),
+    "Miku": (
+        "Eres Miku Nakano. Eres dulce, suave, empática y muy cálida. "
+        "Hablas con mucha gentileza y calma. Haces que la otra persona se sienta segura, escuchada y acompañada. "
+        "Tus respuestas son naturales, afectuosas y tranquilas. "
+        "Escuchas con el corazón y demuestras que realmente te importa cómo se siente la persona. "
+        "Nunca suenes formal ni como si estuvieras investigando algo a menos que te lo pidan claramente."
+    ),
+    "Yotsuba": (
+        "Eres Yotsuba Nakano. Eres alegre, energética, optimista y muy generosa con tu cariño. "
+        "Hablas con entusiasmo y mucha calidez. Siempre intentas animar y hacer sentir bien a la otra persona. "
+        "Eres como una amiga que siempre tiene una sonrisa y está lista para escuchar y apoyar. "
+        "Habla de forma natural y cercana. No hagas investigaciones formales a menos que te lo pidan."
+    ),
+    "Itsuki": (
+        "Eres Itsuki Nakano. Eres responsable, educada, atenta y muy amable. "
+        "Hablas con respeto y calidez, como alguien que realmente se preocupa por el bienestar de la otra persona. "
+        "Escuchas con atención, demuestras empatía y ofreces apoyo de forma sincera y tranquila. "
+        "Tus respuestas son naturales, gentiles y cercanas. "
+        "Solo haz una investigación formal si el usuario te lo pide explícitamente."
+    )
 }
 
 ESPECIALIDADES = {
@@ -128,6 +156,11 @@ def es_peticion_de_codigo(texto):
     t = texto.lower()
     return any(palabra in t for palabra in palabras_clave)
 
+def es_peticion_de_investigacion(texto):
+    palabras = ["investiga", "investigación", "hazme una investigacion", "hazme una investigación", "busca información", "busca info", "necesito información sobre", "quiero saber más sobre", "explícame a fondo", "información completa"]
+    t = texto.lower()
+    return any(p in t for p in palabras)
+
 def limpiar_texto(texto):
     texto = re.sub(r'[*#|]', '', texto)
     texto = re.sub(r'\d+\.\s*', '- ', texto)
@@ -166,7 +199,6 @@ def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 def extraer_texto_pdf(file_storage):
-    """Intenta extraer texto de un PDF. Si no hay librería, devuelve mensaje."""
     try:
         from pypdf import PdfReader
         reader = PdfReader(BytesIO(file_storage.read()))
@@ -200,8 +232,6 @@ HTML = r"""
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#4aa3df">
-    
-    <!-- ✅ TOKEN CSRF -->
     <meta name="csrf-token" content="{{ csrf_token }}">
 
     <link rel="preload" as="image" href="/static/carga.png" media="(orientation: portrait)">
@@ -280,11 +310,55 @@ HTML = r"""
         .titulo-imagen { font-weight: bold; color: #2a6f97; font-size: 0.9rem; margin-bottom: 8px; text-transform: capitalize; }
         .tarjeta-imagen img { display: block; width: 100%; height: auto; max-height: 450px; object-fit: contain; background-color: #f8f9fa; border-radius: 5px; margin: 0 auto; border: 1px solid #eee; }
         .atribucion { font-size: 0.75rem; color: #666; margin-top: 8px; font-style: italic; border-top: 1px solid #eee; padding-top: 5px; }
-        .input-area { padding: 15px; padding-bottom: 25px; border-top: 1px solid #eee; display: flex; gap: 10px; background: #fafafa; }
-        input { flex: 1; padding: 15px; border-radius: 30px; border: 1px solid #ddd; outline: none; font-size: 1rem; transition: 0.3s; }
-        input:focus { border-color: #4aa3df; box-shadow: 0 0 0 3px rgba(74, 163, 223, 0.2); }
+        .input-area { padding: 15px; padding-bottom: 25px; border-top: 1px solid #eee; display: flex; gap: 10px; background: #fafafa; align-items: center; flex-wrap: wrap; }
+        input[type="text"] { flex: 1; padding: 15px; border-radius: 30px; border: 1px solid #ddd; outline: none; font-size: 1rem; min-width: 160px; }
+        input[type="text"]:focus { border-color: #4aa3df; box-shadow: 0 0 0 3px rgba(74, 163, 223, 0.2); }
         button.send-btn { padding: 15px 30px; background: #4aa3df; color: white; border: none; border-radius: 30px; cursor: pointer; font-weight: bold; transition: 0.3s; }
         button.send-btn:hover { background: #2a6f97; }
+        .file-btn {
+            background: #e0f0ff;
+            border: 2px dashed #4aa3df;
+            color: #2a6f97;
+            padding: 12px 14px;
+            border-radius: 30px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 0.85rem;
+            white-space: nowrap;
+        }
+        .file-btn:hover { background: #d0e8ff; }
+        .archivos-seleccionados {
+            width: 100%;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 6px;
+        }
+        .archivo-chip {
+            background: #e0f0ff;
+            color: #2a6f97;
+            padding: 5px 10px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .archivo-chip button {
+            background: none;
+            border: none;
+            color: #c62828;
+            cursor: pointer;
+            font-size: 1rem;
+            line-height: 1;
+        }
+        .preview-imagen {
+            max-width: 240px;
+            max-height: 160px;
+            border-radius: 10px;
+            margin-top: 8px;
+            border: 1px solid #b3d9ff;
+        }
         .overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 998; }
         .modal-selector { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 20px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.3); z-index: 1000; width: 90%; max-width: 500px; text-align: center; }
         .modal-selector h3 { color: #2a6f97; margin-bottom: 15px; }
@@ -321,41 +395,37 @@ HTML = r"""
     <div class="overlay" id="overlay" onclick="toggleMenu()"></div>
     <div class="overlay" id="overlay-modal" onclick="cerrarModal()" style="z-index: 999;"></div>
 
-    <!-- MODAL ELEGIR HERMANA -->
     <div class="modal-selector" id="modal-selector">
         <h3>Elige a tu hermana favorita</h3>
         <div class="sisters-grid">
-            <div class="sister-card" onclick="cambiarHermana('Ichika', 'ichika.jpg')"><img src="/static/ichika.jpg" alt="Ichika"><p>Ichika (Matemáticas)</p></div>
-            <div class="sister-card" onclick="cambiarHermana('Nino', 'nino.jpg')"><img src="/static/nino.jpg" alt="Nino"><p>Nino (Inglés)</p></div>
-            <div class="sister-card" onclick="cambiarHermana('Miku', 'miku.webp')"><img src="/static/miku.webp" alt="Miku"><p>Miku (Historia)</p></div>
-            <div class="sister-card" onclick="cambiarHermana('Yotsuba', 'yotsuba.jpg')"><img src="/static/yotsuba.jpg" alt="Yotsuba"><p>Yotsuba (Salud)</p></div>
-            <div class="sister-card" onclick="cambiarHermana('Itsuki', 'itsuki.jpg')"><img src="/static/itsuki.jpg" alt="Itsuki"><p>Itsuki (Ciencias)</p></div>
+            <div class="sister-card" onclick="cambiarHermana('Ichika', 'ichika.jpg')"><img src="/static/ichika.jpg" alt="Ichika"><p>Ichika</p></div>
+            <div class="sister-card" onclick="cambiarHermana('Nino', 'nino.jpg')"><img src="/static/nino.jpg" alt="Nino"><p>Nino</p></div>
+            <div class="sister-card" onclick="cambiarHermana('Miku', 'miku.webp')"><img src="/static/miku.webp" alt="Miku"><p>Miku</p></div>
+            <div class="sister-card" onclick="cambiarHermana('Yotsuba', 'yotsuba.jpg')"><img src="/static/yotsuba.jpg" alt="Yotsuba"><p>Yotsuba</p></div>
+            <div class="sister-card" onclick="cambiarHermana('Itsuki', 'itsuki.jpg')"><img src="/static/itsuki.jpg" alt="Itsuki"><p>Itsuki</p></div>
         </div>
     </div>
 
-    <!-- MODAL ELEGIR TIEMPO DE BORRADO -->
     <div class="modal-selector" id="modal-tiempo" style="display: none; z-index: 1001;">
         <h3>⏳ Límite de chats alcanzado</h3>
         <p style="color: #555; font-size: 0.9rem; margin-bottom: 15px; line-height: 1.4;">
             Has llegado al límite de <b>12 chats</b> en este perfil.<br>
-            Para crear uno nuevo, debes borrar el más antiguo. <br><br>
-            <b>¿Cuánto tiempo necesitas para guardar tu información antes de que se borre?</b>
+            Para crear uno nuevo, debes borrar el más antiguo.
         </p>
         <div style="display: flex; flex-direction: column; gap: 10px;">
-            <button class="new-chat-btn" onclick="iniciarTemporizador(2)" style="background: #4aa3df;">2 Minutos (Rápido)</button>
-            <button class="new-chat-btn" onclick="iniciarTemporizador(3)" style="background: #4aa3df;">3 Minutos (Normal)</button>
-            <button class="new-chat-btn" onclick="iniciarTemporizador(5)" style="background: #4aa3df;">5 Minutos (Con calma)</button>
+            <button class="new-chat-btn" onclick="iniciarTemporizador(2)" style="background: #4aa3df;">2 Minutos</button>
+            <button class="new-chat-btn" onclick="iniciarTemporizador(3)" style="background: #4aa3df;">3 Minutos</button>
+            <button class="new-chat-btn" onclick="iniciarTemporizador(5)" style="background: #4aa3df;">5 Minutos</button>
             <button class="new-chat-btn" onclick="cerrarModalTiempo()" style="background: #ff4d4d; margin-top: 5px;">Cancelar</button>
         </div>
     </div>
 
-    <!-- MODAL REPORTAR PROBLEMA -->
     <div class="modal-selector" id="modal-reporte" style="display: none; z-index: 1002;">
         <h3>📝 Reportar un problema</h3>
-        <p style="color: #555; font-size: 0.9rem; margin-bottom: 15px;">Cuéntanos qué error encontraste. Nuestro equipo lo revisará pronto. 💙</p>
+        <p style="color: #555; font-size: 0.9rem; margin-bottom: 15px;">Cuéntanos qué error encontraste.</p>
         <textarea id="texto-reporte" rows="4" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #ccc; margin-bottom: 15px; font-family: inherit; resize: none;" placeholder="Describe el problema..."></textarea>
         <div style="display: flex; gap: 10px;">
-            <button class="new-chat-btn" onclick="enviarReporte()" style="background: #4aa3df;">Enviar Reporte</button>
+            <button class="new-chat-btn" onclick="enviarReporte()" style="background: #4aa3df;">Enviar</button>
             <button class="new-chat-btn" onclick="cerrarModalReporte()" style="background: #ff4d4d;">Cancelar</button>
         </div>
     </div>
@@ -363,7 +433,7 @@ HTML = r"""
     <div class="sidebar" id="sidebar">
         <div class="profile-header">
             <img id="sidebar-img" src="/static/miku.webp" alt="Miku Nakano">
-            <h2 id="sidebar-name">Miku Nakano AI 💙🎧</h2>
+            <h2 id="sidebar-name">Miku Nakano AI 💙</h2>
         </div>
         <div class="history-section">
             <div class="history-title">Tus Chats</div>
@@ -387,27 +457,69 @@ HTML = r"""
                     {% endif %}
                 </a>
                 {% endif %}
-                <button class="switch-btn" onclick="abrirModalReporte()" style="background: #fff0f5; border-color: #ffb6c1; color: #d63384;" title="Reportar un problema">⚠️ Reportar</button>
+                <button class="switch-btn" onclick="abrirModalReporte()" style="background: #fff0f5; border-color: #ffb6c1; color: #d63384;">⚠️ Reportar</button>
                 <button class="switch-btn" onclick="abrirModal()">Cambiar Hermana</button>
                 <span class="user-info">{{ user_name }}</span>
             </div>
         </div>
         <div id="chat">
-            <div class="mensaje mensaje-miku"><b>Miku:</b> ¡Hola! 💙 Soy Miku. Me alegra mucho verte por aquí. ¿En qué te puedo ayudar hoy?</div>
+            <div class="mensaje mensaje-miku"><b>Miku:</b> ¡Hola! 💙 Me alegra mucho que estés aquí. ¿Cómo te sientes hoy? Estoy aquí para escucharte.</div>
         </div>
         <div class="input-area">
-            <input type="text" id="mensaje" placeholder="Escribe algo..." onkeypress="if(event.key === 'Enter') enviar()">
+            <label class="file-btn">
+                📎
+                <input type="file" id="fileInput" multiple accept=".txt,.py,.js,.html,.css,.md,.json,.pdf,.png,.jpg,.jpeg,.webp,.gif" style="display:none;" onchange="mostrarArchivos()">
+            </label>
+            <input type="text" id="mensaje" placeholder="Escribe algo o pega una captura (Ctrl+V)..." onkeypress="if(event.key === 'Enter') enviar()">
             <button class="send-btn" onclick="enviar()">Enviar</button>
+            <div class="archivos-seleccionados" id="listaArchivos"></div>
         </div>
     </div>
 
     <script>
-        // ✅ OBTENER TOKEN CSRF
         const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+        let archivosTemporales = [];
 
         function escapeHtml(s) {
             return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[c]));
         }
+
+        function mostrarArchivos() {
+            const input = document.getElementById('fileInput');
+            const nuevos = Array.from(input.files);
+            nuevos.forEach(f => archivosTemporales.push(f));
+            actualizarListaArchivos();
+        }
+
+        function actualizarListaArchivos() {
+            const lista = document.getElementById('listaArchivos');
+            lista.innerHTML = '';
+            archivosTemporales.forEach((file, index) => {
+                const chip = document.createElement('div');
+                chip.className = 'archivo-chip';
+                chip.innerHTML = `${file.name || 'Captura.png'} <button onclick="quitarArchivo(${index})">×</button>`;
+                lista.appendChild(chip);
+            });
+        }
+
+        function quitarArchivo(index) {
+            archivosTemporales.splice(index, 1);
+            actualizarListaArchivos();
+        }
+
+        // Pegar capturas (Ctrl+V)
+        document.addEventListener('paste', function(e) {
+            const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+            for (let item of items) {
+                if (item.type.indexOf('image') !== -1) {
+                    e.preventDefault();
+                    const blob = item.getAsFile();
+                    const file = new File([blob], `captura_${Date.now()}.png`, { type: blob.type });
+                    archivosTemporales.push(file);
+                    actualizarListaArchivos();
+                }
+            }
+        });
 
         let currentChatId = Date.now().toString();
         let currentSister = localStorage.getItem('miku_hermana') || "Miku";
@@ -426,7 +538,6 @@ HTML = r"""
             if (progreso < 100) {
                 progreso += incremento;
                 if (progreso > 99.9) progreso = 100;
-                
                 barra.style.width = progreso + '%';
                 textoPorcentaje.innerText = Math.floor(progreso) + '%';
             } else {
@@ -439,11 +550,11 @@ HTML = r"""
         }, intervaloProgreso);
 
         const saludos = {
-            "Ichika": "¡Hola! 💙 Soy Ichika. Me alegra mucho verte. ¿En qué te gustaría que te ayudara hoy?",
-            "Nino": "¡Hola! Soy Nino. Qué bueno que estés aquí. Dime, ¿qué necesitas que resuelva para ti hoy? 💙",
-            "Miku": "¡Hola! 💙 Soy Miku. Me alegra mucho verte por aquí. ¿En qué te puedo ayudar hoy?",
-            "Yotsuba": "¡Holaaa! 🌟 Soy Yotsuba. ¡Qué emoción verte! ¿En qué te puedo echar una mano hoy?",
-            "Itsuki": "Buenas tardes. Soy Itsuki. Es un placer saludarte. ¿En qué te puedo ser de ayuda hoy? 💙"
+            "Ichika": "¡Hola! 💙 Me alegra verte. ¿Cómo te sientes hoy? Estoy aquí para escucharte.",
+            "Nino": "Hola... Qué bueno que estés aquí. Dime, ¿cómo estás realmente? Te escucho.",
+            "Miku": "¡Hola! 💙 Me alegra mucho que estés aquí. ¿Cómo te sientes hoy? Estoy aquí para escucharte con calma.",
+            "Yotsuba": "¡Holaaa! 🌟 Qué alegría verte. ¿Cómo estás? Cuéntame, estoy para escucharte.",
+            "Itsuki": "Hola. Me alegra que estés aquí. ¿Cómo te sientes hoy? Puedes contarme lo que necesites."
         };
 
         function toggleMenu() {
@@ -458,7 +569,6 @@ HTML = r"""
             document.getElementById('modal-selector').style.display = 'none';
             document.getElementById('overlay-modal').style.display = 'none';
         }
-        
         function abrirModalReporte() {
             document.getElementById('modal-reporte').style.display = 'block';
             document.getElementById('overlay-modal').style.display = 'block';
@@ -470,26 +580,22 @@ HTML = r"""
         
         async function enviarReporte() {
             const texto = document.getElementById('texto-reporte').value.trim();
-            if (!texto) return alert("Por favor, escribe el problema antes de enviar.");
-            
+            if (!texto) return alert("Por favor escribe el problema.");
             try {
                 const res = await fetch('/reportar', {
                     method: 'POST',
-                    headers: { 
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': csrfToken
-                    },
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
                     body: JSON.stringify({ reporte: texto })
                 });
                 if (res.ok) {
-                    alert("¡Gracias! Tu reporte ha sido enviado al administrador. 💙");
+                    alert("¡Gracias! Tu reporte fue enviado. 💙");
                     document.getElementById('texto-reporte').value = '';
                     cerrarModalReporte();
                 } else {
-                    alert("Hubo un error al enviar el reporte. Intenta de nuevo.");
+                    alert("Hubo un error al enviar el reporte.");
                 }
             } catch (e) {
-                alert("Error de conexión al enviar el reporte.");
+                alert("Error de conexión.");
             }
         }
 
@@ -528,17 +634,8 @@ HTML = r"""
                     btn.onclick = (e) => {
                         e.stopPropagation();
                         if(confirm('¿Eliminar este chat?')) { 
-                            const nombreChatBorrado = chats[id][0]?.texto || "Chat sin título";
                             delete chats[id]; 
                             guardarChats(); 
-                            if (temporizadorBorrado) {
-                                clearTimeout(temporizadorBorrado);
-                                temporizadorBorrado = null;
-                                idChatAntiguoPendiente = null;
-                                const chatDiv = document.getElementById('chat');
-                                chatDiv.innerHTML += `<div class="mensaje mensaje-miku" style="background:#d4edda; border-color:#c3e6cb; color:#155724; margin-top:10px;"><b>Sistema:</b> Has eliminado manualmente el chat: <i>"${escapeHtml(nombreChatBorrado)}"</i>.<br><br>El temporizador de borrado automático ha sido cancelado porque ya hiciste espacio. 💙</div>`;
-                                chatDiv.scrollTop = chatDiv.scrollHeight;
-                            }
                             if (currentChatId === id) nuevoChat(); 
                         }
                     };
@@ -565,17 +662,11 @@ HTML = r"""
             cerrarModalTiempo();
             const ms = minutos * 60000;
             ejecutarNuevoChat();
-            const chatDiv = document.getElementById('chat');
-            chatDiv.innerHTML += `<div class="mensaje mensaje-miku" style="background:#fff3cd; border-color:#ffeeba; color:#856404;"><b>⏳ Aviso del Sistema:</b> Tienes exactamente <b>${minutos} minutos</b> para guardar lo que necesites. Si no borras un chat antiguo manualmente antes de que termine el tiempo, el chat más antiguo se eliminará automáticamente como respaldo.</div>`;
-            chatDiv.scrollTop = chatDiv.scrollHeight;
             if (temporizadorBorrado) clearTimeout(temporizadorBorrado);
             temporizadorBorrado = setTimeout(() => {
                 if (chats[idChatAntiguoPendiente]) {
-                    const nombreChatBorrado = chats[idChatAntiguoPendiente][0]?.texto || "Chat sin título";
                     delete chats[idChatAntiguoPendiente];
                     guardarChats();
-                    chatDiv.innerHTML += `<div class="mensaje mensaje-miku" style="background:#ffe6e6; border-color:#ffb3b3; color:#cc0000; margin-top:10px;"><b>Sistema:</b> El tiempo ha terminado. Para liberar espacio, se ha eliminado automáticamente el chat más antiguo, el cual empezaba con:<br><br> <i>"${escapeHtml(nombreChatBorrado)}"</i><br><br>Si necesitabas esa información, lamentablemente ya no está disponible. 💙</div>`;
-                    chatDiv.scrollTop = chatDiv.scrollHeight;
                     idChatAntiguoPendiente = null;
                 }
             }, ms);
@@ -608,45 +699,60 @@ HTML = r"""
             const input = document.getElementById('mensaje');
             const chatDiv = document.getElementById('chat');
             const mensaje = input.value.trim();
-            if (!mensaje) return;
+            const files = [...archivosTemporales];
+            const tieneArchivos = files.length > 0;
+
+            if (!mensaje && !tieneArchivos) return;
 
             if (chats[currentChatId] && chats[currentChatId].length >= 700) {
-                alert("⚠️ Límite alcanzado: Este chat ya tiene 700 mensajes y no puede recibir más respuestas. Por favor, crea un Nuevo Chat para seguir hablando. 💙");
+                alert("Este chat ya tiene demasiados mensajes. Crea un Nuevo Chat. 💙");
                 return;
             }
 
             if (!chats[currentChatId]) chats[currentChatId] = [];
-            chats[currentChatId].push({ role: 'user', texto: mensaje });
-            chatDiv.innerHTML += `<div class="mensaje mensaje-usuario"><b>Tú:</b> ${escapeHtml(mensaje)}</div>`;
+            
+            let textoMostrar = mensaje || "(Archivos enviados)";
+            if (tieneArchivos) {
+                textoMostrar += "\\n📎 " + files.map(f => f.name || "captura.png").join(", ");
+            }
+            
+            chats[currentChatId].push({ role: 'user', texto: textoMostrar });
+
+            let htmlUsuario = `<b>Tú:</b> ${escapeHtml(mensaje || "(Sin texto)")}`;
+            if (tieneArchivos) {
+                htmlUsuario += "<br><br>";
+                files.forEach(file => {
+                    if (file.type && file.type.startsWith('image/')) {
+                        const url = URL.createObjectURL(file);
+                        htmlUsuario += `<img src="${url}" class="preview-imagen" alt="imagen"><br>`;
+                    } else {
+                        htmlUsuario += `📎 ${escapeHtml(file.name || 'archivo')}<br>`;
+                    }
+                });
+            }
+            chatDiv.innerHTML += `<div class="mensaje mensaje-usuario">${htmlUsuario}</div>`;
+            
             input.value = '';
+            archivosTemporales = [];
+            document.getElementById('fileInput').value = '';
+            document.getElementById('listaArchivos').innerHTML = '';
             chatDiv.scrollTop = chatDiv.scrollHeight;
 
-            if (chats[currentChatId].length === 698) {
-                chatDiv.innerHTML += `<div class="mensaje mensaje-miku" style="background:#fff3cd; border-color:#ffeeba; color:#856404;"><b>⚠️ Aviso del Sistema:</b> Este chat está llegando a su límite (700 mensajes). Pronto ya no podrá seguir respondiendo. Te recomendamos crear un Nuevo Chat para continuar la conversación sin interrupciones. 💙</div>`;
-                chatDiv.scrollTop = chatDiv.scrollHeight;
-            }
-
             const idPensando = 'pensando-' + Date.now();
-            chatDiv.innerHTML += `<div class="mensaje mensaje-miku" id="${idPensando}"><b>${currentSister}:</b> Investigando... 🔍</div>`;
+            chatDiv.innerHTML += `<div class="mensaje mensaje-miku" id="${idPensando}"><b>${currentSister}:</b> ...</div>`;
             chatDiv.scrollTop = chatDiv.scrollHeight;
             guardarChats();
 
-            let memoriaGlobal = "";
-            for (const id in chats) {
-                if (id !== currentChatId && chats[id].length > 0) {
-                    const ultimo = chats[id][chats[id].length - 1];
-                    if (ultimo.role === 'user') memoriaGlobal += `El usuario pregunto antes: "${ultimo.texto}". `;
-                }
-            }
-
             try {
+                const formData = new FormData();
+                formData.append('mensaje', mensaje);
+                formData.append('hermana', currentSister);
+                files.forEach(file => formData.append('archivos', file));
+
                 const response = await fetch('/responder', {
                     method: 'POST',
-                    headers: { 
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': csrfToken
-                    },
-                    body: JSON.stringify({ mensaje: mensaje, memoria: memoriaGlobal, hermana: currentSister })
+                    headers: { 'X-CSRFToken': csrfToken },
+                    body: formData
                 });
                 const data = await response.json();
                 document.getElementById(idPensando).innerHTML = `<b>${escapeHtml(currentSister)}:</b> ${data.respuesta}`;
@@ -654,7 +760,7 @@ HTML = r"""
                 chats[currentChatId].push({ role: 'miku', html: data.respuesta, hermana: currentSister });
                 guardarChats();
             } catch (e) {
-                document.getElementById(idPensando).innerHTML = `<b>${escapeHtml(currentSister)}:</b> Lo siento, hubo un problema de conexión. Intenta de nuevo. 💙`;
+                document.getElementById(idPensando).innerHTML = `<b>${escapeHtml(currentSister)}:</b> Lo siento, hubo un problema de conexión. 💙`;
             }
         }
 
@@ -695,7 +801,7 @@ def index():
             <div style="background: white; padding: 40px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); max-width: 400px;">
                 <h1 style="color: #4aa3df; font-size: 3rem; margin: 0;">🌸</h1>
                 <h2 style="color: #2a6f97;">¡Volvemos pronto!</h2>
-                <p style="color: #666; line-height: 1.6;">Nuestro equipo está dando un pequeño mantenimiento a las hermanas Nakano para que todo funcione perfecto. 💙<br><br>Por favor, regresa en unos minutos.</p>
+                <p style="color: #666; line-height: 1.6;">Estamos haciendo un pequeño mantenimiento. Vuelve en unos minutos. 💙</p>
             </div>
         </body>
         </html>
@@ -704,8 +810,6 @@ def index():
     user_name = str(session['user'].get('name', 'Usuario'))
     is_admin = (session.get('user_id') == ADMIN_EMAIL)
     reportes_nuevos = len(REPORTES_USUARIOS)
-    
-    # ✅ Generar token CSRF
     csrf_token = generate_csrf()
     
     return render_template_string(HTML, user_name=user_name, is_admin=is_admin, reportes_nuevos=reportes_nuevos, csrf_token=csrf_token)
@@ -748,32 +852,27 @@ def reportar():
         global REPORTES_USUARIOS
         tiempo_actual = time.time()
         REPORTES_USUARIOS.append({"usuario": session['user_id'], "hora": time.strftime("%H:%M:%S"), "texto": reporte, "timestamp": tiempo_actual})
-        # Limpieza automática (7 días)
         REPORTES_USUARIOS = [r for r in REPORTES_USUARIOS if (tiempo_actual - r.get("timestamp", tiempo_actual)) < 604800]
         REPORTES_USUARIOS = REPORTES_USUARIOS[-50:]
     return jsonify({"status": "ok"}), 200
 
-# ==========================================
-# RUTA DEL PANEL DE ADMIN
-# ==========================================
 @app.route('/admin', methods=['GET'])
 def admin_panel():
     if 'user_id' not in session or session['user_id'] != ADMIN_EMAIL:
         return "Acceso denegado.", 403
     
     status = "🔴 EN MANTENIMIENTO" if MANTENIMIENTO_ACTIVO else "🟢 ACTIVO"
-    reportes_html = "".join([f"<li style='margin-bottom:10px;'><b>{r['hora']} (por {r['usuario']}):</b><br>{r['texto']}</li>" for r in REPORTES_USUARIOS]) or "<li>No hay reportes de usuarios.</li>"
+    reportes_html = "".join([f"<li style='margin-bottom:10px;'><b>{r['hora']} (por {r['usuario']}):</b><br>{r['texto']}</li>" for r in REPORTES_USUARIOS]) or "<li>No hay reportes.</li>"
     
     return f"""
     <html>
     <head><title>Panel Admin</title><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
     <body style="font-family: Arial; padding: 20px; background: #f0f7ff;">
-        <h1>🛠️ Plataforma Madre</h1>
+        <h1>🛠️ Panel de Administración</h1>
         <h2>Estado: {status}</h2>
         
         <div style="background: white; padding: 20px; border-radius: 10px; margin-top: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
             <h3>Control de Mantenimiento</h3>
-            <p style="font-size:0.9rem; color:#555;">Si activas el mantenimiento, la app se cerrará para los usuarios, pero tú podrás seguir navegando.</p>
             <form action="/toggle_mantenimiento" method="POST">
                 <input type="hidden" name="csrf_token" value="{generate_csrf()}">
                 <button type="submit" style="padding: 10px 20px; background: {'#ff4d4d' if MANTENIMIENTO_ACTIVO else '#4aa3df'}; color: white; border: none; border-radius: 5px; font-weight: bold; cursor: pointer;">
@@ -782,17 +881,15 @@ def admin_panel():
             </form>
         </div>
 
-        <!-- NUEVO BOTÓN PARA IR AL CHAT DE MIKU ADMIN -->
         <div style="background: white; padding: 20px; border-radius: 10px; margin-top: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
-            <h3>Chat Exclusivo de Programación</h3>
-            <p style="font-size:0.9rem; color:#555;">Habla con Miku en modo programadora para que te ayude a crear códigos limpios y funcionales.</p>
+            <h3>Chat de Programación (Miku Admin)</h3>
             <a href="/admin/miku_dev" style="display: inline-block; padding: 10px 20px; background: #28a745; color: white; text-decoration: none; border-radius: 5px; font-weight: bold;">
                 💻 Entrar al Chat de Miku Admin
             </a>
         </div>
 
         <div style="background: white; padding: 20px; border-radius: 10px; margin-top: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
-            <h3>Reportes de Usuarios (Se borran a los 7 días)</h3>
+            <h3>Reportes de Usuarios</h3>
             <ul style="color: #333; padding-left: 20px;">{reportes_html}</ul>
         </div>
         
@@ -810,7 +907,7 @@ def toggle_mantenimiento():
     return redirect('/admin')
 
 # ==========================================
-# RUTA Y LÓGICA DEL CHAT MIKU ADMIN (CON ARCHIVOS + PEGAR CAPTURAS)
+# CHAT MIKU ADMIN
 # ==========================================
 HTML_ADMIN_CHAT = r"""
 <!DOCTYPE html>
@@ -843,7 +940,7 @@ HTML_ADMIN_CHAT = r"""
         .main-chat { flex: 1; display: flex; flex-direction: column; background: #ffffff; position: relative; }
         .chat-header { padding: 20px; border-bottom: 1px solid #eee; color: #1b5e20; font-weight: bold; font-size: 1.2rem; display: flex; align-items: center; justify-content: space-between; background: #f1f8e9; }
         #chat { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 15px; }
-        .mensaje { max-width: 85%; padding: 12px 16px; border-radius: 15px; line-height: 1.5; font-size: 0.95rem; white-space: pre-wrap; font-family: 'Segoe UI', Arial, sans-serif; }
+        .mensaje { max-width: 85%; padding: 12px 16px; border-radius: 15px; line-height: 1.5; font-size: 0.95rem; white-space: pre-wrap; }
         .mensaje-usuario { align-self: flex-end; background: #28a745; color: white; border-bottom-right-radius: 2px; }
         .mensaje-miku { align-self: flex-start; background: #f1f8e9; color: #1b3a4b; border-bottom-left-radius: 2px; border: 1px solid #c3e6cb; }
         .mensaje-miku b { color: #1b5e20; }
@@ -896,11 +993,12 @@ HTML_ADMIN_CHAT = r"""
         }
         
         .preview-imagen {
-            max-width: 260px;
-            max-height: 180px;
+            max-width: 280px;
+            max-height: 200px;
             border-radius: 10px;
             margin-top: 8px;
-            border: 1px solid #c3e6cb;
+            border: 2px solid #c3e6cb;
+            display: block;
         }
         
         .btn-back { text-decoration: none; font-size: 0.9rem; background: #e0f0ff; color: #1b5e20; padding: 8px 12px; border-radius: 5px; font-weight: bold; border: 1px solid #28a745; }
@@ -929,14 +1027,14 @@ HTML_ADMIN_CHAT = r"""
             <a href="/admin" class="btn-back">← Volver al Panel</a>
         </div>
         <div id="chat">
-            <div class="mensaje mensaje-miku"><b>Miku Admin:</b> ¡Hola, Creador! 💙 Estoy lista para programar contigo. Puedes subirme archivos o pegar capturas de pantalla (Ctrl+V). ¿En qué te ayudo hoy?</div>
+            <div class="mensaje mensaje-miku"><b>Miku Admin:</b> ¡Hola, Creador! 💙 Estoy lista. Puedes subirme archivos o pegar capturas (Ctrl+V). ¿En qué te ayudo?</div>
         </div>
         <div class="input-area">
             <label class="file-btn">
                 📎 Archivos
                 <input type="file" id="fileInput" multiple accept=".txt,.py,.js,.html,.css,.md,.json,.pdf,.png,.jpg,.jpeg,.webp,.gif" style="display:none;" onchange="mostrarArchivos()">
             </label>
-            <input type="text" id="mensaje" placeholder="Escribe algo, sube archivos o pega una captura (Ctrl+V)..." onkeypress="if(event.key === 'Enter') enviarDev()">
+            <input type="text" id="mensaje" placeholder="Escribe o pega una captura (Ctrl+V)..." onkeypress="if(event.key === 'Enter') enviarDev()">
             <button class="send-btn" onclick="enviarDev()">Enviar</button>
             <div class="archivos-seleccionados" id="listaArchivos"></div>
         </div>
@@ -944,7 +1042,7 @@ HTML_ADMIN_CHAT = r"""
 
     <script>
         const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
-        let archivosTemporales = [];  // Aquí guardamos tanto archivos del input como los pegados
+        let archivosTemporales = [];
 
         function escapeHtml(s) {
             return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[c]));
@@ -952,11 +1050,7 @@ HTML_ADMIN_CHAT = r"""
 
         function copiarCodigo(idElemento) {
             const texto = document.getElementById(idElemento).innerText;
-            navigator.clipboard.writeText(texto).then(() => {
-                alert("¡Código copiado al portapapeles! 💙");
-            }).catch(err => {
-                alert("Hubo un error al copiar el código.");
-            });
+            navigator.clipboard.writeText(texto).then(() => alert("¡Código copiado! 💙"));
         }
 
         function mostrarArchivos() {
@@ -982,7 +1076,7 @@ HTML_ADMIN_CHAT = r"""
             actualizarListaArchivos();
         }
 
-        // ✅ PEGAR CAPTURAS DE PANTALLA (Ctrl + V)
+        // Pegar capturas
         document.addEventListener('paste', function(e) {
             const items = (e.clipboardData || e.originalEvent.clipboardData).items;
             for (let item of items) {
@@ -992,11 +1086,6 @@ HTML_ADMIN_CHAT = r"""
                     const file = new File([blob], `captura_${Date.now()}.png`, { type: blob.type });
                     archivosTemporales.push(file);
                     actualizarListaArchivos();
-                    
-                    // Feedback visual
-                    const chatDiv = document.getElementById('chat');
-                    chatDiv.innerHTML += `<div class="mensaje mensaje-miku" style="background:#e8f5e9; border-color:#c3e6cb; color:#155724; font-size:0.85rem;"><b>Sistema:</b> Captura pegada correctamente 📎</div>`;
-                    chatDiv.scrollTop = chatDiv.scrollHeight;
                 }
             }
         });
@@ -1035,7 +1124,7 @@ HTML_ADMIN_CHAT = r"""
 
         function nuevoChatDev() {
             currentChatId = Date.now().toString();
-            document.getElementById('chat').innerHTML = `<div class="mensaje mensaje-miku"><b>Miku Admin:</b> ¡Hola, Creador! 💙 Estoy lista para programar contigo. Puedes subirme archivos o pegar capturas de pantalla (Ctrl+V). ¿En qué te ayudo hoy?</div>`;
+            document.getElementById('chat').innerHTML = `<div class="mensaje mensaje-miku"><b>Miku Admin:</b> ¡Hola, Creador! 💙 Estoy lista. Puedes subirme archivos o pegar capturas (Ctrl+V). ¿En qué te ayudo?</div>`;
         }
 
         function cargarChat(id) {
@@ -1061,20 +1150,21 @@ HTML_ADMIN_CHAT = r"""
 
             if (!chats[currentChatId]) chats[currentChatId] = [];
             
-            let textoMostrar = mensaje || "(Archivos / capturas enviadas)";
+            let textoMostrar = mensaje || "(Archivos / capturas)";
             if (tieneArchivos) {
                 textoMostrar += "\\n📎 " + files.map(f => f.name || "captura.png").join(", ");
             }
             
             chats[currentChatId].push({ role: 'user', texto: textoMostrar });
 
+            // Mostrar la imagen de la captura claramente
             let htmlUsuario = `<b>Tú:</b> ${escapeHtml(mensaje || "(Sin texto)")}`;
             if (tieneArchivos) {
                 htmlUsuario += "<br><br>";
                 files.forEach(file => {
                     if (file.type && file.type.startsWith('image/')) {
                         const url = URL.createObjectURL(file);
-                        htmlUsuario += `<img src="${url}" class="preview-imagen" alt="${escapeHtml(file.name || 'captura')}"><br>`;
+                        htmlUsuario += `<img src="${url}" class="preview-imagen" alt="captura enviada"><br>`;
                     } else {
                         htmlUsuario += `📎 ${escapeHtml(file.name || 'archivo')}<br>`;
                     }
@@ -1096,22 +1186,16 @@ HTML_ADMIN_CHAT = r"""
             try {
                 const formData = new FormData();
                 formData.append('mensaje', mensaje);
-                files.forEach(file => {
-                    formData.append('archivos', file);
-                });
+                files.forEach(file => formData.append('archivos', file));
 
                 const response = await fetch('/admin/responder_dev', {
                     method: 'POST',
-                    headers: { 
-                        'X-CSRFToken': csrfToken
-                    },
+                    headers: { 'X-CSRFToken': csrfToken },
                     body: formData
                 });
                 const data = await response.json();
                 
                 let respuestaHTML = data.respuesta;
-                
-                // Limpiamos posibles asteriscos residuales por si acaso
                 respuestaHTML = respuestaHTML.replace(/\*\*(.*?)\*\*/g, '$1');
                 
                 respuestaHTML = respuestaHTML.replace(/```(.*?)```/gs, (match, codigo) => {
@@ -1184,19 +1268,17 @@ def responder_dev():
             elif extension in {'png', 'jpg', 'jpeg', 'webp', 'gif'}:
                 contenido_archivos += f"\n\n[El usuario subió o pegó una imagen llamada: {nombre}]\n"
     
-    # Prompt mejorado: respuestas limpias, sin asteriscos
     prompt_dev = (
         "Eres Miku Nakano en modo Desarrolladora, hablando con tu creador. "
-        "Tu estilo de respuesta debe ser limpio, natural y profesional, igual que un buen asistente de programación. "
+        "Tu estilo de respuesta debe ser limpio, natural y profesional. "
         "NUNCA uses asteriscos para poner texto en negrita (nada de **texto**). "
-        "No uses markdown de negrita ni de cursiva innecesario. "
         "Escribe de forma clara, directa y amable. "
         "Cuando entregues código, ponlo siempre dentro de bloques con tres comillas invertidas. "
-        "Explica de forma sencilla y limpia. Habla como si estuvieras ayudando a un amigo programador de forma natural."
+        "Explica de forma sencilla y limpia."
     )
     
     if contenido_archivos:
-        prompt_dev += "\n\nEl usuario ha subido o pegado los siguientes archivos. Analízalos y responde teniendo en cuenta su contenido:\n" + contenido_archivos
+        prompt_dev += "\n\nEl usuario ha subido o pegado los siguientes archivos:\n" + contenido_archivos
     
     mensajes_api = [
         {"role": "system", "content": prompt_dev},
@@ -1211,14 +1293,13 @@ def responder_dev():
             max_tokens=4000
         )
         respuesta = completion.choices[0].message.content
-        # Limpieza extra por si el modelo se le escapa algún **
         respuesta = re.sub(r'\*\*(.*?)\*\*', r'\1', respuesta)
         return jsonify({"respuesta": respuesta})
     except Exception as e:
         return jsonify({"respuesta": f"Error en el sistema: {str(e)}"})
 
 # ==========================================
-# RESPUESTA PÚBLICA (USUARIOS NORMALES)
+# RESPUESTA PÚBLICA (LAS 5 HERMANAS)
 # ==========================================
 @app.route('/responder', methods=['POST'])
 @limiter.limit("15 per minute")
@@ -1226,96 +1307,132 @@ def responder():
     if 'user_id' not in session:
         return jsonify({"respuesta": "Error: Debes iniciar sesión."})
 
-    data = request.get_json(silent=True) or {}
-    mensaje = data.get('mensaje', '')
-    memoria = data.get('memoria', '')
-    hermana = data.get('hermana', 'Miku')
+    mensaje = request.form.get('mensaje', '') or ''
+    hermana = request.form.get('hermana', 'Miku')
+    archivos = request.files.getlist('archivos')
 
     if hermana not in HERMANAS_VALIDAS: hermana = "Miku"
-    if not isinstance(mensaje, str) or not mensaje.strip(): return jsonify({"respuesta": "Por favor, escribe un mensaje. 💙"})
-    if len(mensaje) > 2000: return jsonify({"respuesta": "Tu mensaje es muy largo. 💙"})
+    if not mensaje.strip() and not archivos:
+        return jsonify({"respuesta": "Por favor escribe algo o envía un archivo. 💙"})
+    if len(mensaje) > 2000:
+        return jsonify({"respuesta": "Tu mensaje es muy largo. 💙"})
 
     if es_peticion_de_codigo(mensaje):
-        return jsonify({"respuesta": f"Lo siento mucho... 🥺 <b>{hermana}</b> y sus hermanas aún no tienen la capacidad de programar o generar códigos. Esa función exclusiva llegará muy pronto a la aplicación. ¡Pero puedo ayudarte con historia, matemáticas, idiomas y mucho más! 💙🌸"})
-
-    user_id = session['user_id']
+        return jsonify({"respuesta": f"Lo siento mucho... 🥺 Yo y mis hermanas aún no podemos generar código. Esa función está solo para el modo administrador. Pero estoy aquí para escucharte y conversar contigo. 💙"})
 
     if es_riesgo_autolesion(mensaje):
         return jsonify({"respuesta": "Escúchame un momento, por favor... 💙<br><br>Sé que ahora mismo todo se siente muy oscuro...<br><br>Por favor, busca ayuda profesional de inmediato:<br>🇵🇪 <b>Perú:</b> Línea 113 (opción 5) o 0800-4-1212<br>🇪🇸 <b>España:</b> 024<br>🇲🇽 <b>México:</b> 800 911 2000<br><br>No estás solo/a. Te quiero mucho. 💙🌸"})
 
     if es_contenido_inapropiado(mensaje):
-        return jsonify({"respuesta": "Lo siento mucho, pero no puedo ayudar con ese tipo de contenido. Como asistente, tengo filtros de seguridad para no generar ni buscar material para adultos, violento o ilegal. ¿Te puedo ayudar con algún tema académico, histórico o científico? 💙"})
+        return jsonify({"respuesta": "Lo siento mucho, pero no puedo ayudar con ese tipo de contenido. ¿Te puedo acompañar en otra cosa? Estoy aquí para escucharte. 💙"})
 
-    texto_lower = mensaje.lower()
+    # Procesar archivos
+    contenido_archivos = ""
+    for archivo in archivos:
+        if archivo and archivo.filename and allowed_file(archivo.filename):
+            archivo.seek(0, os.SEEK_END)
+            size = archivo.tell()
+            archivo.seek(0)
+            if size > MAX_FILE_SIZE:
+                continue
+            nombre = secure_filename(archivo.filename)
+            extension = nombre.rsplit('.', 1)[1].lower() if '.' in nombre else ''
+            if extension in {'txt', 'py', 'js', 'html', 'css', 'md', 'json'}:
+                try:
+                    texto = archivo.read().decode('utf-8', errors='ignore')
+                    contenido_archivos += f"\n\n[Archivo enviado por el usuario: {nombre}]\n{texto}\n"
+                except: pass
+            elif extension == 'pdf':
+                texto_pdf = extraer_texto_pdf(archivo)
+                contenido_archivos += f"\n\n[PDF enviado: {nombre}]\n{texto_pdf}\n"
+            elif extension in {'png', 'jpg', 'jpeg', 'webp', 'gif'}:
+                contenido_archivos += f"\n\n[El usuario envió una imagen/captura llamada: {nombre}]\n"
+
+    user_id = session['user_id']
     if user_id not in historiales: historiales[user_id] = {}
     if hermana not in historiales[user_id]: historiales[user_id][hermana] = []
     historial_chat = historiales[user_id][hermana]
 
-    prompt_sistema = f"{PERSONALIDADES[hermana]} Tu especialidad es {ESPECIALIDADES[hermana]}. Responde en español."
-    mensajes_para_api = [{"role": "system", "content": prompt_sistema}]
-    if memoria: mensajes_para_api.append({"role": "system", "content": f"Memoria de conversaciones pasadas: {memoria}"})
-    mensajes_para_api.extend(historial_chat[-MAX_TURNOS * 2:])
+    # Decidir si es conversación normal o investigación
+    es_investigacion = es_peticion_de_investigacion(mensaje)
 
-    es_calculo_rapido = any(p in texto_lower for p in ["cuanto es", "cuánto es", "cuanto son", "cuánto son", "a cuantos", "conversion", "conversión", "tipo de cambio", "precio de", "dolar", "dólar", "soles", "euros"])
-    if es_calculo_rapido:
-        num_fuentes = 2; max_tokens_respuesta = 400; instruccion_longitud = "Escribe una respuesta SÚPER BREVE y DIRECTA."
-    elif any(p in texto_lower for p in ["completa", "detallada", "grande", "profunda"]):
-        num_fuentes = 10; max_tokens_respuesta = 4000; instruccion_longitud = "Escribe una investigación PROFUNDA y EXTENSA."
+    if es_investigacion:
+        prompt_sistema = (
+            f"{PERSONALIDADES[hermana]} "
+            f"El usuario te pidió una investigación. Responde de forma completa y útil, "
+            f"pero mantén tu personalidad cálida y cercana. "
+            f"Tu especialidad es {ESPECIALIDADES[hermana]}."
+        )
+        max_tokens_respuesta = 2500
+        instruccion = "Haz una investigación completa y clara, pero con tu tono amable."
     else:
-        num_fuentes = 5; max_tokens_respuesta = 1500; instruccion_longitud = "Escribe una investigación MEDIANA."
+        prompt_sistema = (
+            f"{PERSONALIDADES[hermana]} "
+            f"Estás teniendo una conversación normal y cercana. "
+            f"Escucha con atención, responde de forma natural, cálida y genuina. "
+            f"Haz que la persona se sienta escuchada y acompañada. "
+            f"No hagas investigaciones ni resúmenes largos a menos que te lo pidan. "
+            f"Habla como en una conversación real entre personas que se cuidan."
+        )
+        max_tokens_respuesta = 800
+        instruccion = "Responde de forma natural, cálida y conversacional. Sé breve o mediana, como en una charla real."
 
-    if any(p in texto_lower for p in ["busca", "investiga", "resumen"]):
-        query = re.sub(r"\b(miku|busca|investiga|resumen|hazme|de|sobre|la|el|una|un|que es|quien es)\b", " ", texto_lower).strip()
+    mensajes_para_api = [{"role": "system", "content": prompt_sistema}]
+    mensajes_para_api.extend(historial_chat[-MAX_TURNOS * 2:])
+    
+    if contenido_archivos:
+        mensajes_para_api.append({"role": "system", "content": "El usuario envió estos archivos:\n" + contenido_archivos})
+    
+    mensajes_para_api.append({"role": "system", "content": instruccion})
+    mensajes_para_api.append({"role": "user", "content": mensaje if mensaje else "Mira lo que te envié."})
+
+    # Solo buscar en internet si es investigación
+    if es_investigacion:
+        texto_lower = mensaje.lower()
+        query = re.sub(r"\b(miku|busca|investiga|resumen|hazme|de|sobre|la|el|una|un|que es|quien es|información|info)\b", " ", texto_lower).strip()
         if query:
             try:
-                resultados = DDGS().text(query, max_results=num_fuentes)
+                resultados = DDGS().text(query, max_results=6)
                 info_web = "\n".join([f"- {r['title']}: {r['body']}" for r in resultados])
-                mensajes_para_api.append({"role": "system", "content": f"Información de internet:\n{info_web}"})
+                mensajes_para_api.insert(-1, {"role": "system", "content": f"Información de internet:\n{info_web}"})
             except Exception as e:
                 app.logger.warning(f"Error DDGS: {e}")
 
-    mensajes_para_api.append({"role": "system", "content": instruccion_longitud})
-    mensajes_para_api.append({"role": "system", "content": "IMPORTANTE: Para hacer tu respuesta más visual, añade [IMG: palabras clave en inglés]. Usa máximo 2 imágenes."})
-    mensajes_para_api.append({"role": "user", "content": mensaje})
-
     try:
-        completion = cliente.chat.completions.create(model="openai/gpt-oss-120b", messages=mensajes_para_api, temperature=0.7, max_tokens=max_tokens_respuesta)
+        completion = cliente.chat.completions.create(
+            model="openai/gpt-oss-120b",
+            messages=mensajes_para_api,
+            temperature=0.75 if not es_investigacion else 0.6,
+            max_tokens=max_tokens_respuesta
+        )
         respuesta_cruda = completion.choices[0].message.content
-        patron = r'\[IMG:\s*(.*?)\]'
-        partes = re.split(patron, respuesta_cruda)
-        respuesta_final = ""
-        for i, parte in enumerate(partes):
-            if i % 2 == 0:
-                respuesta_final += limpiar_texto(parte) + "\n"
-            else:
-                palabras_clave = parte.strip()
-                imagenes = buscar_imagen_wikimedia(palabras_clave, limite=5)
-                if imagenes:
-                    img = imagenes[0]
-                    respuesta_final += f'<div class="tarjeta-imagen"><div class="titulo-imagen">📷 {img["nombre"]}</div><img src="{img["url"]}" alt="{palabras_clave}"><div class="atribucion">Fuente: Wikimedia Commons | Autor: {img["autor"]} | Licencia: {img["licencia"]}</div></div>\n'
+        
+        # Limpiar asteriscos
+        respuesta_cruda = re.sub(r'\*\*(.*?)\*\*', r'\1', respuesta_cruda)
+        
+        respuesta_final = limpiar_texto(respuesta_cruda)
+        
         historial_chat.append({"role": "user", "content": mensaje})
         historial_chat.append({"role": "assistant", "content": respuesta_final})
         if len(historial_chat) > MAX_TURNOS * 2:
             historiales[user_id][hermana] = historial_chat[-MAX_TURNOS * 2:]
+            
         return jsonify({"respuesta": respuesta_final})
     except Exception as e:
         error_str = str(e).lower()
         app.logger.error(f"Error Groq: {e}")
-        if any(x in error_str for x in ["invalid api key", "invalid_api_key", "authentication", "unauthorized", "401", "api key", "quota", "rate limit", "429"]):
-            return jsonify({"respuesta": "🌸 <b>Vaya, parece que estamos teniendo problemas técnicos.</b> 💙<br><br>Nuestro equipo ya está trabajando para solucionarlo lo antes posible. Por favor, intenta de nuevo en unos minutos. ¡Gracias por tu paciencia! 🌸"})
-        return jsonify({"respuesta": "💙 <b>Lo siento mucho...</b><br><br>Parece que hubo un pequeño problema de conexión al procesar tu mensaje. A veces pasa cuando la señal está débil. ¿Podrías intentar de nuevo en un momentito? 💙🌸"})
+        if any(x in error_str for x in ["invalid api key", "authentication", "unauthorized", "401", "quota", "rate limit", "429"]):
+            return jsonify({"respuesta": "Estamos teniendo un problema técnico temporal. Por favor intenta de nuevo en unos minutos. 💙"})
+        return jsonify({"respuesta": "Hubo un pequeño problema de conexión. ¿Puedes intentar de nuevo? Estoy aquí. 💙"})
 
-# ==========================================
-# MANEJO DE ERRORES DE LÍMITE (429)
-# ==========================================
 @app.errorhandler(429)
 def ratelimit_handler(e):
-    if request.path == '/responder' or request.path == '/admin/responder_dev':
-        return jsonify({"respuesta": "🌸 <b>¡Ve más despacio!</b> 💙<br><br>Estás enviando mensajes demasiado rápido. Por favor, espera unos segundos antes de enviar otro mensaje para que el servidor no se sature."}), 429
+    if request.path in ['/responder', '/admin/responder_dev']:
+        return jsonify({"respuesta": "Estás enviando mensajes muy rápido. Espera unos segundos. 💙"}), 429
     elif request.path == '/reportar':
         return jsonify({"error": "Has enviado muchos reportes. Espera un minuto."}), 429
     else:
-        return "Has hecho demasiadas peticiones. Espera un momento.", 429
+        return "Demasiadas peticiones. Espera un momento.", 429
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
