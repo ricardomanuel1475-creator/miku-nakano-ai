@@ -7,6 +7,8 @@ from datetime import timedelta
 from groq import Groq
 from duckduckgo_search import DDGS
 from authlib.integrations.flask_client import OAuth
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 
 # Cargar .env en local (en Render usa sus env vars, no hace nada)
 try:
@@ -27,6 +29,14 @@ app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
 
 app.secret_key = os.environ.get('SECRET_KEY', 'MikuNakanoEsLaMejorAsistente2026')
+
+# ✅ RATE LIMITING (Límite de peticiones)
+limiter = Limiter(
+    get_remote_address,
+    app=app,
+    default_limits=["50 per minute"],
+    storage_uri="memory://",
+)
 
 # ✅ ADMINISTRACIÓN
 ADMIN_EMAIL = "ricardomanuel1475@gmail.com"
@@ -360,8 +370,8 @@ HTML = r"""
         let progreso = 0;
         
         // ✅ LÓGICA DE CARGA SINCRONIZADA A 15 SEGUNDOS
-        const duracionCarga = 15000; // 15 segundos en milisegundos
-        const intervaloProgreso = 100; // Actualizar cada 100ms
+        const duracionCarga = 15000; 
+        const intervaloProgreso = 100; 
         const pasosTotales = duracionCarga / intervaloProgreso;
         const incremento = 100 / pasosTotales;
 
@@ -374,11 +384,10 @@ HTML = r"""
                 textoPorcentaje.innerText = Math.floor(progreso) + '%';
             } else {
                 clearInterval(intervalo);
-                // Ya llegó al 100%, ahora esperamos a que termine el tiempo para quitar la pantalla
                 setTimeout(() => {
                     const loader = document.getElementById('loading-screen');
                     if(loader) loader.classList.add('hidden');
-                }, 500); // Medio segundo extra al 100% para que se vea bonito
+                }, 500); 
             }
         }, intervaloProgreso);
 
@@ -672,6 +681,7 @@ def serve_sw():
     return send_from_directory('static', 'sw.js')
 
 @app.route('/reportar', methods=['POST'])
+@limiter.limit("5 per minute")
 def reportar():
     if 'user_id' not in session:
         return jsonify({"error": "No autorizado"}), 401
@@ -791,7 +801,7 @@ HTML_ADMIN_CHAT = r"""
         .btn-back { text-decoration: none; font-size: 0.9rem; background: #e0f0ff; color: #1b5e20; padding: 8px 12px; border-radius: 5px; font-weight: bold; border: 1px solid #28a745; }
         
         @media (max-width: 768px) {
-            .sidebar { display: none; } /* En móviles se oculta la barra para dar espacio al chat */
+            .sidebar { display: none; }
             .menu-btn { display: block; }
         }
     </style>
@@ -837,7 +847,6 @@ HTML_ADMIN_CHAT = r"""
             });
         }
 
-        // Historial exclusivo para el admin
         let currentChatId = Date.now().toString();
         let chats = JSON.parse(localStorage.getItem('miku_dev_chats')) || {};
 
@@ -913,7 +922,6 @@ HTML_ADMIN_CHAT = r"""
                 });
                 const data = await response.json();
                 
-                // Formatear código y añadir botón de copiar
                 let respuestaHTML = data.respuesta;
                 respuestaHTML = respuestaHTML.replace(/```(.*?)```/gs, (match, codigo) => {
                     const idBoton = 'copiar-' + Math.floor(Math.random() * 100000);
@@ -948,6 +956,7 @@ def miku_dev_chat():
     return render_template_string(HTML_ADMIN_CHAT)
 
 @app.route('/admin/responder_dev', methods=['POST'])
+@limiter.limit("15 per minute")
 def responder_dev():
     if 'user_id' not in session or session['user_id'] != ADMIN_EMAIL:
         return jsonify({"respuesta": "Acceso denegado."})
@@ -982,6 +991,7 @@ def responder_dev():
 # RESPUESTA PÚBLICA (USUARIOS NORMALES)
 # ==========================================
 @app.route('/responder', methods=['POST'])
+@limiter.limit("15 per minute")
 def responder():
     if 'user_id' not in session:
         return jsonify({"respuesta": "Error: Debes iniciar sesión."})
@@ -1065,6 +1075,18 @@ def responder():
         if any(x in error_str for x in ["invalid api key", "invalid_api_key", "authentication", "unauthorized", "401", "api key", "quota", "rate limit", "429"]):
             return jsonify({"respuesta": "🌸 <b>Vaya, parece que estamos teniendo problemas técnicos.</b> 💙<br><br>Nuestro equipo ya está trabajando para solucionarlo lo antes posible. Por favor, intenta de nuevo en unos minutos. ¡Gracias por tu paciencia! 🌸"})
         return jsonify({"respuesta": "💙 <b>Lo siento mucho...</b><br><br>Parece que hubo un pequeño problema de conexión al procesar tu mensaje. A veces pasa cuando la señal está débil. ¿Podrías intentar de nuevo en un momentito? 💙🌸"})
+
+# ==========================================
+# MANEJO DE ERRORES DE LÍMITE (429)
+# ==========================================
+@app.errorhandler(429)
+def ratelimit_handler(e):
+    if request.path == '/responder' or request.path == '/admin/responder_dev':
+        return jsonify({"respuesta": "🌸 <b>¡Ve más despacio!</b> 💙<br><br>Estás enviando mensajes demasiado rápido. Por favor, espera unos segundos antes de enviar otro mensaje para que el servidor no se sature."}), 429
+    elif request.path == '/reportar':
+        return jsonify({"error": "Has enviado muchos reportes. Espera un minuto."}), 429
+    else:
+        return "Has hecho demasiadas peticiones. Espera un momento.", 429
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
