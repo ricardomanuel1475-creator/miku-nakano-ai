@@ -75,7 +75,7 @@ oauth.register(
 # ==========================================
 # GROQ
 # ==========================================
-GROQ_API_KEY = os.environ.get('GROQ_API_KEY', "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")
+GROQ_API_KEY = os.environ.get('GROQ_API_KEY', "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")
 cliente = Groq(api_key=GROQ_API_KEY)
 
 # ==========================================
