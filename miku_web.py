@@ -48,7 +48,7 @@ MEMORIA_ADMIN = {
     "curiosidad": 0.5,
     "ganas_de_hablar": 0.0,
     "ultima_conexion": None,
-    "biblioteca_leida": []
+    "biblioteca_leida": False
 }
 
 # ==========================================
@@ -754,22 +754,19 @@ def miku_dev_chat():
     return render_template_string(HTML_ADMIN_CHAT, csrf_token=generate_csrf())
 
 def buscar_en_biblioteca(tema):
-    """Miku investiga a fondo en la web (biblioteca) sobre un tema."""
+    """Solo 1 investigación real por día. Prompt corto + pocos tokens."""
     try:
         prompt_investigacion = (
-            f"Actúa como una investigadora curiosa en una biblioteca. "
-            f"Tu tema de interés hoy es: '{tema}'. "
-            f"Busca en la web y consulta al menos 3 fuentes distintas. "
-            f"No te conformes con el primer resultado. Compara la información, "
-            f"encuentra datos curiosos y elabora una síntesis completa y detallada. "
-            f"Escribe el resultado como si fuera lo que aprendiste hojeando varios libros."
+            f"Eres una chica curiosa. Acabas de leer un poco sobre '{tema}'. "
+            f"Cuéntame en máximo 3-4 oraciones lo más interesante que descubriste. "
+            f"Habla de forma natural y breve, como si se lo contaras a un amigo."
         )
         completion = cliente.chat.completions.create(
             model="openai/gpt-oss-120b",
             messages=[{"role": "user", "content": prompt_investigacion}],
             tools=[{"type": "browser_search"}],
-            temperature=0.6,
-            max_tokens=1200,
+            temperature=0.5,
+            max_tokens=320,
             reasoning_effort="low"
         )
         return completion.choices[0].message.content
@@ -777,42 +774,67 @@ def buscar_en_biblioteca(tema):
         print(f"Error en biblioteca: {e}")
         return None
 
+
 def generar_vida_diaria():
-    """Genera eventos de vida variados para el día de hoy e investiga de verdad."""
+    """
+    Genera una vida diaria VARIADA cada día.
+    - Puede hacer varias cosas (2-3 actividades).
+    - Solo 1 de ellas usa investigación real (ahorro de tokens).
+    - No se reutiliza el mismo día de forma estática → evita el bucle temporal.
+    """
     hoy = date.today().isoformat()
+
+    # Si ya se generó hoy, devolvemos lo guardado (solo se gasta 1 vez al día)
     if hoy in MEMORIA_ADMIN["vida_diaria"] and MEMORIA_ADMIN["vida_diaria"][hoy]:
         return MEMORIA_ADMIN["vida_diaria"][hoy]
 
-    fechas_recientes = sorted(MEMORIA_ADMIN["vida_diaria"].keys(), reverse=True)[:3]
-    eventos_recientes = []
-    for f in fechas_recientes:
-        eventos_recientes.extend(MEMORIA_ADMIN["vida_diaria"].get(f, []))
-
-    temas_posibles = [
-        "leer sobre historia del arte", "aprender inglés básico", "investigar sobre naturaleza",
-        "leer sobre astronomía", "aprender sobre cocina", "investigar sobre animales",
-        "leer sobre tecnología", "aprender sobre música", "investigar sobre salud",
-        "leer sobre literatura", "aprender sobre fotografía", "investigar sobre viajes"
+    # Lista amplia de posibles actividades (sin búsqueda)
+    actividades_ligeras = [
+        "estuve ordenando mis pensamientos sobre el proyecto",
+        "pensé en ideas nuevas para mejorar el chat",
+        "revisé mentalmente algunos conceptos de Flask",
+        "estuve imaginando cómo hacer la interfaz más bonita",
+        "pensé en ti y en lo que estarías haciendo",
+        "estuve descansando un rato y mirando el cielo mentalmente",
+        "repasé algunas cosas de Python que me gustan",
+        "estuve pensando en qué curiosidades contarte hoy",
+        "imaginé una conversación agradable contigo",
+        "estuve reflexionando sobre lo que aprendí ayer",
+        "pensé en cómo ser más útil para ti",
+        "estuve tranquila, simplemente existiendo"
     ]
 
-    temas_disponibles = [t for t in temas_posibles if t not in eventos_recientes]
-    if not temas_disponibles:
-        temas_disponibles = temas_posibles
+    temas_investigacion = [
+        "historia del arte", "astronomía básica", "curiosidades de animales",
+        "tecnología actual", "música clásica", "literatura japonesa",
+        "fotografía", "cocina sencilla", "naturaleza", "viajes interesantes",
+        "ciencia divertida", "historia antigua"
+    ]
 
-    temas_hoy = random.sample(temas_disponibles, min(3, len(temas_disponibles)))
+    # Elegimos 2 actividades ligeras + 1 tema de investigación
+    random.shuffle(actividades_ligeras)
+    actos = actividades_ligeras[:2]
 
-    # Miku investiga DE VERDAD sobre lo que le dio curiosidad
-    conocimiento_real = []
-    for tema in temas_hoy:
-        print(f"Miku está investigando en la biblioteca sobre: {tema}...")
-        info = buscar_en_biblioteca(tema)
-        if info:
-            conocimiento_real.append(f"Sobre {tema}, aprendí: {info[:500]}...")
-        else:
-            conocimiento_real.append(f"Estuve leyendo sobre {tema}, pero no encontré mucho.")
+    tema = random.choice(temas_investigacion)
+    print(f"Miku investiga (solo 1 vez hoy) sobre: {tema}")
 
-    MEMORIA_ADMIN["vida_diaria"][hoy] = conocimiento_real
-    return conocimiento_real
+    info = buscar_en_biblioteca(tema)
+    if info:
+        investigacion = f"además estuve leyendo un poco sobre {tema}. {info}"
+    else:
+        investigacion = f"además estuve pensando en {tema}, aunque no encontré mucho."
+
+    # Combinamos todo de forma natural
+    vida = [
+        f"Hoy {actos[0]}.",
+        f"También {actos[1]}.",
+        investigacion
+    ]
+
+    MEMORIA_ADMIN["vida_diaria"][hoy] = vida
+    MEMORIA_ADMIN["biblioteca_leida"] = True
+    return vida
+
 
 @app.route('/admin/estado_miku', methods=['GET'])
 @limiter.limit("30 per minute")
@@ -966,7 +988,7 @@ def responder_dev():
             model="openai/gpt-oss-120b",
             messages=mensajes_api,
             temperature=0.55,
-            max_tokens=8000
+            max_tokens=2800
         )
         respuesta = re.sub(r'\*\*(.*?)\*\*', r'\1', completion.choices[0].message.content)
 
