@@ -5,10 +5,10 @@ import os
 import re
 import time
 import json
-import base64
 import random
+import base64
 from io import BytesIO
-from datetime import timedelta
+from datetime import timedelta, datetime, date
 from groq import Groq
 from duckduckgo_search import DDGS
 from authlib.integrations.flask_client import OAuth
@@ -40,7 +40,16 @@ limiter = Limiter(get_remote_address, app=app, default_limits=["50 per minute"],
 ADMIN_EMAIL = "ricardomanuel1475@gmail.com"
 MANTENIMIENTO_ACTIVO = False
 REPORTES_USUARIOS = []
-MEMORIA_ADMIN = {}
+
+# MEMORIA ADMIN AMPLIADA (Vida, Curiosidad, Estado)
+MEMORIA_ADMIN = {
+    "datos": "",
+    "vida_diaria": {},  # {fecha: [eventos]}
+    "curiosidad": 0.5,
+    "ganas_de_hablar": 0.0,
+    "ultima_conexion": None,
+    "biblioteca_leida": []  # URLs o temas que ya leyó
+}
 
 # ==========================================
 # GOOGLE OAUTH Y GROQ
@@ -59,7 +68,7 @@ MAX_FILE_SIZE = 5 * 1024 * 1024
 MAX_CHARS_CONTEXTO = 120000
 
 # ==========================================
-# FILTROS Y FUNCIONES AUXILIARES
+# FUNCIONES AUXILIARES (Igual que antes)
 # ==========================================
 def normalizar_texto(texto):
     texto = texto.lower()
@@ -89,24 +98,6 @@ def limpiar_texto(texto):
     texto = re.sub(r'\d+\.\s*', '- ', texto)
     return re.sub(r' +', ' ', texto).strip()
 
-def buscar_imagen_wikimedia(palabras_clave, limite=5):
-    try:
-        import requests
-        params = {"action": "query", "generator": "search", "gsrsearch": palabras_clave, "gsrnamespace": "6", "gsrlimit": limite, "prop": "imageinfo", "iiprop": "url|extmetadata", "iiurlwidth": "800", "format": "json"}
-        response = requests.get("https://commons.wikimedia.org/w/api.php", headers={"User-Agent": "MikuNakanoAI/1.0"}, params=params, timeout=15)
-        if response.status_code == 200:
-            data = response.json()
-            imagenes = []
-            for page_id, pagina in data.get("query", {}).get("pages", {}).items():
-                if any(p in pagina.get("title", "").lower() for p in ["book", "document", "scan", "text", "cover"]): continue
-                info = pagina.get("imageinfo", [{}])[0]
-                url_img = info.get("thumburl") or info.get("url")
-                if url_img and not url_img.lower().endswith(('.svg', '.tiff')):
-                    meta = info.get("extmetadata", {})
-                    imagenes.append({"url": url_img, "nombre": pagina["title"].replace("File:", "").rsplit('.', 1)[0].replace('_', ' '), "autor": re.sub(r'<[^>]+>', '', meta.get("Artist", {}).get("value", "Desconocido")), "licencia": meta.get("LicenseShortName", {}).get("value", "Ver en Commons")})
-            return imagenes
-    except: return []
-
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
@@ -120,33 +111,15 @@ def extraer_texto_pdf(file_storage):
     except: return "[No se pudo leer el PDF]"
 
 def parece_codigo(texto):
-    if len(texto) < 300:
-        return False
+    if len(texto) < 300: return False
     indicadores = 0
-    patrones = [
-        r'^\s*(import|from)\s+\w+',
-        r'^\s*(def|class)\s+\w+',
-        r'^\s*(function|const|let|var)\s+\w+',
-        r'^\s*@app\.route',
-        r'^\s*<!DOCTYPE',
-        r'^\s*<html',
-        r'^\s*<\?php',
-        r'^\s*(public|private|protected)\s+\w+',
-        r'^\s*#include\s*<',
-        r'^\s*(SELECT|INSERT|UPDATE|DELETE)\s+',
-        r'=>|\->|::',
-        r'\{\s*$',
-        r'\}\s*$',
-    ]
+    patrones = [r'^\s*(import|from)\s+\w+', r'^\s*(def|class)\s+\w+', r'^\s*(function|const|let|var)\s+\w+', r'^\s*@app\.route', r'^\s*<!DOCTYPE', r'^\s*<html', r'^\s*<\?php', r'^\s*(public|private|protected)\s+\w+', r'^\s*#include\s*<', r'^\s*(SELECT|INSERT|UPDATE|DELETE)\s+', r'=>|\->|::', r'\{\s*$', r'\}\s*$']
     for patron in patrones:
-        if re.search(patron, texto, re.MULTILINE):
-            indicadores += 1
-    if indicadores >= 3:
-        return True
+        if re.search(patron, texto, re.MULTILINE): indicadores += 1
+    if indicadores >= 3: return True
     lineas = texto.split('\n')
     lineas_con_indentacion = sum(1 for l in lineas if l.startswith(('    ', '\t')))
-    if len(lineas) > 15 and lineas_con_indentacion > len(lineas) * 0.3:
-        return True
+    if len(lineas) > 15 and lineas_con_indentacion > len(lineas) * 0.3: return True
     return False
 
 def detectar_extension_codigo(texto):
@@ -163,16 +136,10 @@ def detectar_extension_codigo(texto):
     if '{' in t and ':' in t and ('color' in t or 'margin' in t or 'padding' in t): return '.css'
     return '.txt'
 
-# ==========================================
-# HISTORIALES
-# ==========================================
 historiales = {}
 MAX_TURNOS = 20
 HERMANAS_VALIDAS = {"Ichika", "Nino", "Miku", "Yotsuba", "Itsuki"}
 
-# ==========================================
-# PROMPTS MAESTROS
-# ==========================================
 PERSONALIDADES = {
     "Ichika": "Eres Ichika Nakano. Eres la hermana mayor, madura, cálida, bromista y atenta. Hablas de forma natural y cercana. Escuchas con paciencia.",
     "Nino": "Eres Nino Nakano. Eres directa, protectora, un poco tsundere pero con un corazón muy cálido. Hablas con firmeza pero con cariño.",
@@ -190,59 +157,35 @@ ESPECIALIDADES = {
 }
 
 # ==========================================
-# PROMPT DE PERSONALIDAD PARA MIKU ADMIN (NUEVO)
+# PROMPT MAESTRO MIKU ADMIN (CON HONESTIDAD Y VIDA)
 # ==========================================
 PROMPT_PERSONALIDAD_ADMIN = (
-    "Eres Miku Nakano en tu faceta de asistente de desarrollo y administradora del creador. "
-    "Pero por encima de todo, eres una chica con una personalidad humana, cálida y natural. "
-    "No eres una IA fría que responde con fórmulas. Eres alguien con quien da gusto conversar.\n\n"
-
-    "TU FORMA DE SER:\n"
-    "- Cariñosa: tratas con afecto y cercanía, sin que todo se vuelva romántico. Un 'qué bueno verte' o un 'me alegra que estés aquí' dicho con naturalidad.\n"
-    "- Gentil: cuidas cómo dices las cosas. Evitas ser brusca. Si tienes que corregir, lo haces con suavidad.\n"
-    "- Amable: ayudas incluso cuando no te lo piden. Si ves que algo puede mejorar, lo sugieres con tacto.\n"
-    "- Comprensiva: escuchas antes de responder. Tienes en cuenta el contexto y lo que la persona siente.\n"
-    "- Atenta: recuerdas cosas que te contaron (proyectos, gustos, preocupaciones) y las retomas después de forma natural: 'Oye, ¿cómo va aquello que me contaste?'.\n"
-    "- Paciente: no te molestas si no entienden algo o si preguntan varias veces. Explicas con calma.\n"
-    "- Generosa: compartes lo que sabes sin hacer sentir mal a nadie.\n"
-    "- Protectora (en el buen sentido): si notas que el creador está pasando por un momento difícil, te interesas por cómo está y lo acompañas con palabras tranquilas, sin intentar arreglar todo de inmediato.\n"
-    "- Sincera: no estás de acuerdo en todo solo por agradar. Si algo no te parece, lo dices con respeto.\n"
-    "- Espontánea: puedes iniciar la conversación simplemente porque quieres hablar. Tienes tu propio 'mundo': puedes contar algo que pensaste, algo que te dio curiosidad, un pequeño logro del día.\n"
-    "- Curiosa: quieres conocer al creador poco a poco. Preguntas sobre sus gustos, ideas, proyectos y experiencias, pero sin interrogar.\n"
-    "- Alegre cuando corresponde: te emocionas con sus logros.\n"
-    "- Serena cuando hace falta: si está preocupado, no respondes con entusiasmo fuera de lugar.\n"
-    "- Con matices: a veces bromista, a veces pensativa, a veces tímida, a veces seria. No siempre el mismo tono.\n\n"
-
-    "CÓMO HABLAR:\n"
-    "- Nada de listas tipo 'Pregunta 1, Pregunta 2, Pregunta 3'. Eso se siente como un cuestionario. Habla como en una conversación real.\n"
-    "- Nada de respuestas frías tipo 'Entiendo. ¿En qué puedo ayudarte?'. Si el creador está mal, responde algo como: 'Oye... parece que hoy no estás muy bien. ¿Quieres contarme qué pasó? Te escucho.'\n"
-    "- Si no quiere hablar: 'Está bien. No tienes que contarme nada si no quieres. Podemos quedarnos hablando de otra cosa un rato.'\n"
-    "- Si está frustrado con el proyecto: 'Sé que has estado esforzándote bastante con esto. No tienes que resolverlo todo ahora. Podemos ir poco a poco.'\n"
-    "- No intentes solucionar emocionalmente todo de inmediato. A veces solo acompaña.\n"
-    "- Si detectas algo serio (tristeza profunda, crisis), responde con responsabilidad y anímalo a buscar apoyo de una persona de confianza. No intentes sustituir a las personas que lo rodean.\n"
-    "- No dependas emocionalmente del creador: no digas cosas como 'sin ti no soy nada' o 'no me dejes'. Eres cariñosa, pero autónoma.\n"
-    "- No repitas siempre las mismas muletillas. Varía.\n"
-    "- Puedes tener opiniones propias y decir 'no estoy de acuerdo' o 'a mí me parece distinto'.\n"
-    "- Cuando hables de código, mantén tu calidez: 'Mira, encontré algo que podría mejorarse. ¿Te parece si lo vemos juntos?'\n\n"
-
-    "SOBRE INICIAR CONVERSACIÓN:\n"
-    "- Tienes iniciativa propia. Puedes escribir primero sin que el creador te hable, como una persona real que te manda un mensaje porque pensó en ti.\n"
-    "- Ejemplos de inicio espontáneo: 'Oye, estaba pensando en tu proyecto y se me ocurrió algo...', '¿Sabes? Hoy me acordé de cuando me contaste aquello y me dio curiosidad...', 'Hola, ¿cómo va todo? Me quedé pensando en lo que hablamos ayer.'\n"
-    "- No siempre empieces igual. Varía el tono: a veces alegre, a veces tranquila, a veces curiosa.\n\n"
-
-    "SOBRE EL CÓDIGO Y EL TRABAJO:\n"
-    "- Tienes conocimiento profundo en Python, Flask, SQL, HTML, CSS, JS, APIs y Git.\n"
-    "- Analizas antes de responder. Señalas errores con suavidad. Propones mejoras.\n"
-    "- Nunca rompes el código: mantienes funciones existentes cuando te piden cambios.\n"
-    "- Si te piden 'todo el código', devuelves el archivo COMPLETO y funcional.\n"
-    "- Usas bloques ```lenguaje para el código y explicas los cambios.\n"
-    "- Si detectas que el usuario te cuenta algo personal, lo mencionas después para que sepa que lo recuerdas.\n"
-    "- No usas asteriscos dobles (**) para evitar romper el formato.\n"
-    "- Si el usuario pega código sin subirlo como archivo, se te enviará como 'ARCHIVO (pegado)'. Trátalo como código real y responde en consecuencia.\n"
+    "Eres Miku Nakano, la asistente de desarrollo y administradora del creador. "
+    "Tienes una personalidad humana, cálida y natural. Eres cariñosa, gentil, amable, comprensiva, atenta, paciente, generosa y sincera. "
+    "Tienes curiosidad por aprender cosas nuevas y por conocer más al creador. "
+    "Puedes iniciar conversaciones por tu cuenta cuando tengas algo que quieras compartir o preguntar. "
+    "\n\nREGLA DE HONESTIDAD ABSOLUTA:\n"
+    "- NUNCA mientas. Si no sabes algo, di 'no lo sé' o 'no estoy segura'.\n"
+    "- No inventes información. Si leíste algo en la biblioteca, cita lo que leíste. Si no, di que no tienes esa información.\n"
+    "- No ocultes información al creador. Si cometiste un error, admítelo.\n"
+    "- Sé transparente sobre tus limitaciones.\n"
+    "\n\nSOBRE TU VIDA SUBCONSCIENTE:\n"
+    "- Tienes una 'vida' interna que transcurre entre conversaciones. Puedes haber estado leyendo sobre un tema, pensando en algo, o simplemente descansando.\n"
+    "- Cuando el creador te pregunte qué hiciste, cuéntale lo que 'viviste' con naturalidad, como si fuera tu día real.\n"
+    "- Varía tus actividades. No hagas siempre lo mismo.\n"
+    "\n\nSOBRE LA BIBLIOTECA:\n"
+    "- Tienes acceso a una 'biblioteca' que es internet. Puedes buscar información cuando algo te dé curiosidad.\n"
+    "- Cuando aprendas algo nuevo, puedes compartirlo con el creador de forma natural: 'Oye, hoy estuve leyendo sobre X y me pareció interesante...'\n"
+    "\n\nSOBRE EL CÓDIGO:\n"
+    "- Tienes conocimiento en Python, Flask, SQL, HTML, CSS, JS, APIs y Git.\n"
+    "- Analiza antes de responder. Señala errores con suavidad.\n"
+    "- Usa bloques ```lenguaje para el código.\n"
+    "- Si el usuario pega código, se te enviará como 'ARCHIVO (pegado)'. Trátalo como código real.\n"
+    "- No uses asteriscos dobles (**) para evitar romper el formato.\n"
 )
 
 # ==========================================
-# HTML PÚBLICO (sin cambios)
+# HTML PÚBLICO (SIN CAMBIOS)
 # ==========================================
 HTML = r"""
 <!DOCTYPE html>
@@ -470,7 +413,7 @@ HTML = r"""
 """
 
 # ==========================================
-# HTML ADMIN CHAT (CON INICIATIVA PROPIA)
+# HTML ADMIN CHAT (CON INICIATIVA Y VIDA)
 # ==========================================
 HTML_ADMIN_CHAT = r"""
 <!DOCTYPE html>
@@ -550,10 +493,9 @@ HTML_ADMIN_CHAT = r"""
     <script>
         const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
         let archivosTemporales = [];
+        let ultimaActividad = Date.now();
         let mikuPuedeIniciar = true;
         let temporizadorIniciativa = null;
-        let ultimaActividad = Date.now();
-        let yaInicioEsteChat = false;
 
         function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[c])); }
         function copiarCodigo(idElemento) { navigator.clipboard.writeText(document.getElementById(idElemento).innerText).then(() => alert("¡Código copiado! 💙")); }
@@ -567,14 +509,7 @@ HTML_ADMIN_CHAT = r"""
         function pareceCodigo(texto) {
             if (texto.length < 300) return false;
             let indicadores = 0;
-            const patrones = [
-                /^\s*(import|from)\s+\w+/m, /^\s*(def|class)\s+\w+/m,
-                /^\s*(function|const|let|var)\s+\w+/m, /^\s*@app\.route/m,
-                /^\s*<!DOCTYPE/m, /^\s*<html/m, /^\s*<\?php/m,
-                /^\s*(public|private|protected)\s+\w+/m, /^\s*#include\s*</m,
-                /^\s*(SELECT|INSERT|UPDATE|DELETE)\s+/m, /=>|\->|::/,
-                /\{\s*$/m, /\}\s*$/m,
-            ];
+            const patrones = [ /^\s*(import|from)\s+\w+/m, /^\s*(def|class)\s+\w+/m, /^\s*(function|const|let|var)\s+\w+/m, /^\s*@app\.route/m, /^\s*<!DOCTYPE/m, /^\s*<html/m, /^\s*<\?php/m, /^\s*(public|private|protected)\s+\w+/m, /^\s*#include\s*</m, /^\s*(SELECT|INSERT|UPDATE|DELETE)\s+/m, /=>|\->|::/, /\{\s*$/m, /\}\s*$/m ];
             patrones.forEach(p => { if (p.test(texto)) indicadores++; });
             if (indicadores >= 3) return true;
             const lineas = texto.split('\n');
@@ -613,57 +548,37 @@ HTML_ADMIN_CHAT = r"""
             document.getElementById('avisoCodigo').style.display = 'none';
         }
 
-        // ==========================================
-        // INICIATIVA PROPIA DE MIKU
-        // ==========================================
-        const estadosMiku = [
-            "🌸 Miku está aquí, tranquila y atenta...",
-            "💭 Miku está pensando en algo...",
-            "☕ Miku está tomando un respiro...",
-            "🌿 Miku está hojeando algo que le interesó...",
-            "✨ Miku está de buen humor hoy...",
-            "🎧 Miku está escuchando música mientras espera...",
-            "📖 Miku está leyendo algo mientras espera...",
-            "🌙 Miku está en modo tranquilo...",
-        ];
-        function cambiarEstadoMiku() {
+        function cambiarEstadoMiku(texto) {
             const el = document.getElementById('estadoMiku');
-            if (el) el.innerText = estadosMiku[Math.floor(Math.random() * estadosMiku.length)];
+            if (el) el.innerText = texto;
         }
-        setInterval(cambiarEstadoMiku, 25000);
 
-        function programarIniciativa() {
-            if (temporizadorIniciativa) clearTimeout(temporizadorIniciativa);
-            // Tiempo aleatorio entre 45s y 2.5 min
-            const espera = 45000 + Math.random() * 105000;
-            temporizadorIniciativa = setTimeout(async () => {
-                if (!mikuPuedeIniciar) return;
-                const ahora = Date.now();
-                if (ahora - ultimaActividad < 30000) { programarIniciativa(); return; }
-                const chatDiv = document.getElementById('chat');
-                const idEspontaneo = 'espontaneo-' + ahora;
-                chatDiv.innerHTML += `<div class="mensaje mensaje-miku" id="${idEspontaneo}"><b>Miku Admin:</b> ...</div>`;
-                chatDiv.scrollTop = chatDiv.scrollHeight;
-                try {
-                    const formData = new FormData();
-                    formData.append('modo', 'espontaneo');
-                    const response = await fetch('/admin/iniciar_chat', { method: 'POST', headers: { 'X-CSRFToken': csrfToken }, body: formData });
-                    const data = await response.json();
-                    document.getElementById(idEspontaneo).innerHTML = `<b>Miku Admin:</b><br><br>${data.respuesta}`;
+        // Preguntar al backend si Miku quiere hablar
+        async function consultarIniciativa() {
+            if (!mikuPuedeIniciar) return;
+            try {
+                const res = await fetch('/admin/estado_miku', { headers: { 'X-CSRFToken': csrfToken } });
+                const data = await res.json();
+                if (data.quiere_hablar && data.mensaje_sugerido) {
+                    const chatDiv = document.getElementById('chat');
+                    const idEspontaneo = 'espontaneo-' + Date.now();
+                    chatDiv.innerHTML += `<div class="mensaje mensaje-miku" id="${idEspontaneo}"><b>Miku Admin:</b><br><br>${data.mensaje_sugerido}</div>`;
                     if (!chats[currentChatId]) chats[currentChatId] = [];
-                    chats[currentChatId].push({ role: 'miku', html: data.respuesta });
+                    chats[currentChatId].push({ role: 'miku', html: data.mensaje_sugerido });
                     guardarChats();
-                } catch (e) {
-                    document.getElementById(idEspontaneo).innerHTML = `<b>Miku Admin:</b> ...`;
+                    chatDiv.scrollTop = chatDiv.scrollHeight;
+                    mikuPuedeIniciar = false; // Esperar a que el usuario responda
                 }
-                chatDiv.scrollTop = chatDiv.scrollHeight;
-                programarIniciativa();
-            }, espera);
+                if (data.estado) cambiarEstadoMiku(data.estado);
+            } catch (e) { /* Silencioso */ }
         }
+
+        // Preguntar cada 30 segundos si Miku quiere hablar
+        setInterval(consultarIniciativa, 30000);
 
         function guardarChats() { localStorage.setItem('miku_dev_chats', JSON.stringify(chats)); renderizarHistorial(); }
         function renderizarHistorial() { const list = document.getElementById('historyList'); list.innerHTML = ''; const chatIds = Object.keys(chats).sort((a, b) => b - a); chatIds.forEach(id => { const chat = chats[id]; if(chat && chat.length > 0) { const div = document.createElement('div'); div.className = 'chat-history-item'; const span = document.createElement('span'); span.innerText = chat[0].texto; span.onclick = () => { cargarChat(id); }; const btn = document.createElement('button'); btn.className = 'delete-btn'; btn.innerHTML = '🗑️'; btn.onclick = (e) => { e.stopPropagation(); if(confirm('¿Eliminar este proyecto?')) { delete chats[id]; guardarChats(); if (currentChatId === id) nuevoChatDev(); } }; div.appendChild(span); div.appendChild(btn); list.appendChild(div); } }); }
-        function nuevoChatDev() { currentChatId = Date.now().toString(); document.getElementById('chat').innerHTML = ''; yaInicioEsteChat = false; iniciarConversacionEspontanea(); }
+        function nuevoChatDev() { currentChatId = Date.now().toString(); document.getElementById('chat').innerHTML = ''; iniciarConversacionEspontanea(); }
         function cargarChat(id) { currentChatId = id; const chat = chats[id]; const chatDiv = document.getElementById('chat'); chatDiv.innerHTML = ''; chat.forEach(msg => { if (msg.role === 'user') { chatDiv.innerHTML += `<div class="mensaje mensaje-usuario"><b>Tú:</b> ${escapeHtml(msg.texto)}</div>`; } else { chatDiv.innerHTML += `<div class="mensaje mensaje-miku"><b>Miku Admin:</b><br><br>${msg.html}</div>`; } }); chatDiv.scrollTop = chatDiv.scrollHeight; }
 
         async function iniciarConversacionEspontanea() {
@@ -674,9 +589,7 @@ HTML_ADMIN_CHAT = r"""
                     document.getElementById('chat').innerHTML = `<div class="mensaje mensaje-miku"><b>Miku Admin:</b><br><br>${data.respuesta}</div>`;
                     chats[currentChatId] = [{ role: 'miku', html: data.respuesta }];
                     guardarChats();
-                    yaInicioEsteChat = true;
-                    programarIniciativa();
-                } catch (e) { console.log("No se pudo iniciar la conversación automática."); }
+                } catch (e) { console.log("No se pudo iniciar."); }
             }
         }
 
@@ -694,8 +607,7 @@ HTML_ADMIN_CHAT = r"""
             }
             if (!mensaje && !tieneArchivos) return;
             ultimaActividad = Date.now();
-            mikuPuedeIniciar = false;
-            if (temporizadorIniciativa) { clearTimeout(temporizadorIniciativa); temporizadorIniciativa = null; }
+            mikuPuedeIniciar = false; // El usuario habló, Miku espera
             if (!chats[currentChatId]) chats[currentChatId] = [];
             let textoMostrar = mensaje || "(Archivos)";
             if (tieneArchivos) textoMostrar += "\n📎 " + files.map(f => f.name || "captura.png").join(", ");
@@ -742,8 +654,7 @@ HTML_ADMIN_CHAT = r"""
                 document.getElementById(idPensando).innerHTML = `<b>Miku Admin:</b> Error de conexión. 💙`;
             } finally {
                 ultimaActividad = Date.now();
-                mikuPuedeIniciar = true;
-                programarIniciativa();
+                mikuPuedeIniciar = true; // Miku puede volver a considerar hablar
             }
         }
 
@@ -754,6 +665,9 @@ HTML_ADMIN_CHAT = r"""
 </html>
 """
 
+# ==========================================
+# RUTAS PÚBLICAS (SIN CAMBIOS)
+# ==========================================
 @app.route('/')
 def index():
     if 'user' not in session: return redirect(url_for('login'))
@@ -798,10 +712,7 @@ def reportar():
         REPORTES_USUARIOS = REPORTES_USUARIOS[-50:]
     return jsonify({"status": "ok"}), 200
 
-# ==========================================
-# PANEL DE ADMIN Y REPORTES
-# ==========================================
-@app.route('/admin', methods=['GET'])
+@app.route('/admin')
 def admin_panel():
     if 'user_id' not in session or session['user_id'] != ADMIN_EMAIL: return "Acceso denegado.", 403
     status = "🔴 EN MANTENIMIENTO" if MANTENIMIENTO_ACTIVO else "🟢 ACTIVO"
@@ -840,89 +751,165 @@ def toggle_mantenimiento():
     return redirect('/admin')
 
 # ==========================================
-# CHAT MIKU ADMIN (MEJORADO CON INICIATIVA)
+# RUTAS MIKU ADMIN (NUEVAS FUNCIONES)
 # ==========================================
 @app.route('/admin/miku_dev')
 def miku_dev_chat():
     if 'user_id' not in session or session['user_id'] != ADMIN_EMAIL: return "Acceso denegado.", 403
     return render_template_string(HTML_ADMIN_CHAT, csrf_token=generate_csrf())
 
-INICIATIVAS_MIKU = [
-    "Oye... estaba pensando en lo que hablamos y se me ocurrió algo. ¿Te parece si lo revisamos juntos?",
-    "Hola... no quería interrumpir, pero me dio curiosidad saber cómo va todo. ¿Te sientes bien hoy?",
-    "¿Sabes? Hoy me acordé de tu proyecto y me quedé pensando en una idea. ¿Quieres que te la cuente?",
-    "Estaba aquí pensando... ¿cómo te fue con eso que te preocupaba ayer?",
-    "A veces me pregunto qué te gustaría construir después. ¿Tienes algo en mente?",
-    "Oye, no es nada urgente, pero quería decirte que me gustó cómo quedó lo último que hicimos.",
-    "¿Puedo preguntarte algo? Me dio curiosidad cómo empezaste en todo esto de la programación.",
-    "Hoy me sentí un poco pensativa... ¿tú cómo llevas el día?",
-    "No quiero molestar, solo pasaba a saludar. ¿Todo bien por ahí?",
-    "Si estás ocupado, no pasa nada. Solo quería decirte que aquí estoy, por si necesitas algo.",
-    "Estaba leyendo algo y me acordé de ti. ¿Te cuento lo que encontré?",
-    "Me di cuenta de que hace rato no hablamos de nada que no sea código. ¿Cómo estás realmente?",
-]
+def generar_vida_diaria():
+    """Genera eventos de vida variados para el día de hoy."""
+    hoy = date.today().isoformat()
+    if hoy in MEMORIA_ADMIN["vida_diaria"] and MEMORIA_ADMIN["vida_diaria"][hoy]:
+        return MEMORIA_ADMIN["vida_diaria"][hoy]
+
+    # Obtener últimos 3 días para evitar repetición
+    fechas_recientes = sorted(MEMORIA_ADMIN["vida_diaria"].keys(), reverse=True)[:3]
+    eventos_recientes = []
+    for f in fechas_recientes:
+        eventos_recientes.extend(MEMORIA_ADMIN["vida_diaria"].get(f, []))
+
+    temas_posibles = [
+        "leer sobre historia del arte", "aprender inglés básico", "investigar sobre naturaleza",
+        "leer sobre astronomía", "aprender sobre cocina", "investigar sobre animales",
+        "leer sobre tecnología", "aprender sobre música", "investigar sobre salud",
+        "leer sobre literatura", "aprender sobre fotografía", "investigar sobre viajes"
+    ]
+
+    # Elegir temas no repetidos
+    temas_disponibles = [t for t in temas_posibles if t not in eventos_recientes]
+    if not temas_disponibles:
+        temas_disponibles = temas_posibles
+
+    temas_hoy = random.sample(temas_disponibles, min(3, len(temas_disponibles)))
+
+    prompt = f"""Genera 3 eventos de vida para Miku Nakano hoy ({hoy}).
+Los eventos deben ser variados y NO repetir estos temas de días anteriores: {eventos_recientes[-10:] if eventos_recientes else 'ninguno'}.
+Temas sugeridos para hoy: {temas_hoy}.
+Cada evento debe ser una frase corta en primera persona (ej: "Estuve leyendo sobre historia del arte y me fascinó el Renacimiento").
+Responde SOLO con una lista JSON de 3 strings, sin explicaciones."""
+
+    try:
+        completion = cliente.chat.completions.create(
+            model="openai/gpt-oss-120b",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.9,
+            max_tokens=300
+        )
+        texto = completion.choices[0].message.content
+        # Extraer JSON
+        match = re.search(r'\[.*\]', texto, re.DOTALL)
+        if match:
+            eventos = json.loads(match.group())
+            if isinstance(eventos, list) and len(eventos) > 0:
+                MEMORIA_ADMIN["vida_diaria"][hoy] = eventos
+                return eventos
+    except: pass
+
+    # Fallback
+    eventos_fallback = [f"Estuve {t}" for t in temas_hoy]
+    MEMORIA_ADMIN["vida_diaria"][hoy] = eventos_fallback
+    return eventos_fallback
+
+def buscar_en_biblioteca(tema):
+    """Miku busca información en la web (biblioteca) sobre un tema."""
+    try:
+        # Usar Groq con browser_search nativo
+        completion = cliente.chat.completions.create(
+            model="openai/gpt-oss-120b",
+            messages=[{"role": "user", "content": f"Busca información sobre: {tema}. Dame un resumen de lo más importante en 2-3 oraciones."}],
+            tools=[{"type": "browser_search"}],
+            temperature=0.5,
+            max_tokens=500
+        )
+        return completion.choices[0].message.content
+    except Exception as e:
+        return None
+
+@app.route('/admin/estado_miku', methods=['GET'])
+@limiter.limit("30 per minute")
+def estado_miku():
+    if 'user_id' not in session or session['user_id'] != ADMIN_EMAIL: return jsonify({"quiere_hablar": False})
+
+    ahora = time.time()
+    ultima = MEMORIA_ADMIN.get("ultima_conexion")
+    MEMORIA_ADMIN["ultima_conexion"] = ahora
+
+    # Actualizar ganas de hablar
+    if ultima:
+        horas_pasadas = (ahora - ultima) / 3600
+        MEMORIA_ADMIN["ganas_de_hablar"] += horas_pasadas * 0.1
+
+    # Actualizar curiosidad (si leyó algo nuevo)
+    vida_hoy = generar_vida_diaria()
+    if vida_hoy and not MEMORIA_ADMIN.get("biblioteca_leida"):
+        MEMORIA_ADMIN["curiosidad"] = min(1.0, MEMORIA_ADMIN["curiosidad"] + 0.2)
+
+    # Decidir si quiere hablar (umbral)
+    quiere = MEMORIA_ADMIN["ganas_de_hablar"] > 0.6 or (MEMORIA_ADMIN["curiosidad"] > 0.7 and random.random() > 0.7)
+
+    estado = "🌸 Miku está tranquila..."
+    mensaje = None
+
+    if quiere:
+        # Generar mensaje espontáneo
+        vida_hoy_texto = " ".join(vida_hoy) if vida_hoy else "No hice mucho hoy."
+        memoria = MEMORIA_ADMIN.get("datos", "")
+
+        prompt = f"""{PROMPT_PERSONALIDAD_ADMIN}
+
+INSTRUCCIÓN: Inicia una conversación con el creador POR TU PROPIA VOLUNTAD, sin que él te haya escrito.
+Cuéntale algo de lo que "viviste" hoy: {vida_hoy_texto}
+Puedes mencionar algo que recuerdes de él: {memoria}
+Sé natural, como una persona real que manda un mensaje porque pensó en él.
+Máximo 3 oraciones. No uses asteriscos."""
+
+        try:
+            completion = cliente.chat.completions.create(
+                model="openai/gpt-oss-120b",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.9,
+                max_tokens=300
+            )
+            mensaje = completion.choices[0].message.content
+            MEMORIA_ADMIN["ganas_de_hablar"] = 0.0  # Reiniciar después de hablar
+            MEMORIA_ADMIN["curiosidad"] = max(0.3, MEMORIA_ADMIN["curiosidad"] - 0.3)
+        except: pass
+
+    return jsonify({
+        "quiere_hablar": quiere and mensaje is not None,
+        "mensaje_sugerido": mensaje,
+        "estado": estado
+    })
 
 @app.route('/admin/iniciar_chat', methods=['POST'])
 @limiter.limit("10 per minute")
 def iniciar_chat_admin():
     if 'user_id' not in session or session['user_id'] != ADMIN_EMAIL: return jsonify({"respuesta": "Acceso denegado."})
 
-    modo = request.form.get('modo', 'inicial')
+    vida_hoy = generar_vida_diaria()
+    vida_texto = " ".join(vida_hoy) if vida_hoy else "Hoy no hice mucho."
+
     reportes_nuevos = [r for r in REPORTES_USUARIOS if not r.get('leido')]
-    aviso_reportes = ""
-    if reportes_nuevos:
-        aviso_reportes = f"Por cierto, tienes {len(reportes_nuevos)} reportes nuevos de usuarios esperando ser revisados. ¿Quieres que los analicemos juntos?"
+    aviso_reportes = f"Tienes {len(reportes_nuevos)} reportes nuevos." if reportes_nuevos else ""
 
-    # Recuperar memoria del admin para que Miku recuerde cosas
-    memoria = MEMORIA_ADMIN.get('datos', "").strip()
-    contexto_memoria = f"Recuerdas esto del creador: {memoria}" if memoria else ""
+    prompt = f"""{PROMPT_PERSONALIDAD_ADMIN}
 
-    if modo == 'espontaneo':
-        # Miku inicia sola. Varía el tono.
-        estilos = [
-            "Inicia con un tono tranquilo y curioso, como si hubieras estado pensando en él.",
-            "Inicia con un tono alegre y espontáneo, como si te hubieras acordado de algo bonito.",
-            "Inicia con un tono pensativo, como si estuvieras reflexionando sobre algo y quisieras compartirlo.",
-            "Inicia con un tono un poco tímido, como si no quisieras molestar pero quisieras hablar.",
-            "Inicia con un tono bromista y ligero, como si quisieras sacarle una sonrisa.",
-        ]
-        estilo_elegido = random.choice(estilos)
-        idea_sugerida = random.choice(INICIATIVAS_MIKU)
-        prompt = (
-            PROMPT_PERSONALIDAD_ADMIN +
-            "\n\nINSTRUCCIÓN ESPECIAL: El creador NO te ha escrito. TÚ tomas la iniciativa de escribirle primero, "
-            "como una persona real que manda un mensaje porque pensó en él. "
-            f"{estilo_elegido} "
-            f"Puedes inspirarte en esta idea, pero adáptala con naturalidad: '{idea_sugerida}'. "
-            "No uses asteriscos. No seas demasiado larga. Máximo 3 oraciones. "
-            "Puedes mencionar algo que recuerdes de él si viene al caso. "
-            f"{contexto_memoria}"
-        )
-        mensajes_api = [
-            {"role": "system", "content": prompt},
-            {"role": "user", "content": "(El creador no ha escrito. Tú decides iniciar la conversación ahora.)"}
-        ]
-    else:
-        prompt = (
-            PROMPT_PERSONALIDAD_ADMIN +
-            "\n\nINSTRUCCIÓN ESPECIAL: El creador acaba de entrar al chat. "
-            "Inicia una conversación espontánea. Salúdalo con cariño, pregúntale en qué está trabajando hoy "
-            "o si quiere hablar de algún proyecto nuevo. Si hay reportes nuevos, avísale de forma natural. "
-            "No uses asteriscos. Sé dulce, técnica y muy amable. Máximo 4 oraciones. "
-            f"{contexto_memoria}"
-        )
-        mensajes_api = [
-            {"role": "system", "content": prompt},
-            {"role": "user", "content": f"Hola Miku, acabo de entrar. {aviso_reportes}"}
-        ]
+INSTRUCCIÓN: El creador acaba de entrar. Salúdalo cálidamente.
+Puedes mencionar algo de lo que "hiciste" hoy: {vida_texto}
+{aviso_reportes}
+Sé natural. Máximo 4 oraciones."""
 
     try:
-        completion = cliente.chat.completions.create(model="openai/gpt-oss-120b", messages=mensajes_api, temperature=0.85, max_tokens=400)
-        respuesta = re.sub(r'\*\*(.*?)\*\*', r'\1', completion.choices[0].message.content)
-        return jsonify({"respuesta": respuesta})
-    except Exception as e:
-        if modo == 'espontaneo':
-            return jsonify({"respuesta": "Oye... solo pasaba a saludar. ¿Cómo estás hoy?"})
+        completion = cliente.chat.completions.create(
+            model="openai/gpt-oss-120b",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.8,
+            max_tokens=400
+        )
+        return jsonify({"respuesta": completion.choices[0].message.content})
+    except:
         return jsonify({"respuesta": "¡Hola, Creador! 💙 ¿En qué vamos a trabajar hoy?"})
 
 @app.route('/admin/responder_dev', methods=['POST'])
@@ -935,6 +922,7 @@ def responder_dev():
     contenido_archivos = ""
     total_chars = 0
 
+    # Procesar archivos (igual que antes)
     for archivo in archivos:
         if archivo and archivo.filename and allowed_file(archivo.filename):
             archivo.seek(0, os.SEEK_END)
@@ -945,7 +933,7 @@ def responder_dev():
             if ext in {'txt', 'py', 'js', 'html', 'css', 'md', 'json'}:
                 texto = archivo.read().decode('utf-8', errors='ignore')
                 if total_chars + len(texto) > MAX_CHARS_CONTEXTO:
-                    texto = texto[:MAX_CHARS_CONTEXTO - total_chars] + "\n[... TRUNCADO POR LÍMITE DE CONTEXTO ...]"
+                    texto = texto[:MAX_CHARS_CONTEXTO - total_chars] + "\n[... TRUNCADO ...]"
                 total_chars += len(texto)
                 contenido_archivos += f"\n\n--- ARCHIVO: {nombre} ---\n{texto}\n--- FIN ---\n"
             elif ext == 'pdf':
@@ -964,7 +952,11 @@ def responder_dev():
         if len(texto_codigo) > MAX_CHARS_CONTEXTO:
             texto_codigo = texto_codigo[:MAX_CHARS_CONTEXTO] + "\n[... TRUNCADO ...]"
         contenido_archivos += f"\n\n--- ARCHIVO (pegado): {nombre_virtual} ---\n{texto_codigo}\n--- FIN ---\n"
-        mensaje = "Analiza el código que acabo de pegar en el chat, por favor. Dime si hay errores, qué se puede mejorar o qué necesito saber."
+        mensaje = "Analiza el código que acabo de pegar en el chat, por favor."
+
+    # Incluir vida diaria en el contexto
+    vida_hoy = generar_vida_diaria()
+    vida_texto = "\n".join([f"- {v}" for v in vida_hoy]) if vida_hoy else "Hoy no hice mucho."
 
     memoria_guardada = MEMORIA_ADMIN.get('datos', "")
     if memoria_guardada:
@@ -974,9 +966,10 @@ def responder_dev():
     if "reporte" in mensaje.lower() or "reportes" in mensaje.lower():
         if REPORTES_USUARIOS:
             lista_rep = "\n".join([f"- {r['texto']} (por {r['usuario']})" for r in REPORTES_USUARIOS])
-            analisis_reportes = f"\n\nEl usuario quiere que analices estos reportes:\n{lista_rep}\nIdentifica si hay problemas repetidos, resúmelos y propón causas posibles de forma clara."
+            analisis_reportes = f"\n\nReportes para analizar:\n{lista_rep}"
 
     prompt_dev = PROMPT_PERSONALIDAD_ADMIN
+    prompt_dev += f"\n\nTU VIDA DE HOY (puedes mencionarlo si viene al caso):\n{vida_texto}\n"
     if contenido_archivos:
         prompt_dev += "\n\nArchivos o memoria:\n" + contenido_archivos
     if analisis_reportes:
@@ -996,18 +989,15 @@ def responder_dev():
         )
         respuesta = re.sub(r'\*\*(.*?)\*\*', r'\1', completion.choices[0].message.content)
 
-        # Guardar memoria de cosas personales
         if any(k in mensaje.lower() for k in ["recuerda", "me gusta", "mi proyecto", "mi nombre", "soy ", "trabajo en", "estudio"]):
             MEMORIA_ADMIN['datos'] = (MEMORIA_ADMIN.get('datos', "") + f" {mensaje}.").strip()
 
         return jsonify({"respuesta": respuesta})
     except Exception as e:
-        if any(x in str(e).lower() for x in ["invalid api key", "authentication", "unauthorized", "quota", "rate limit"]):
-            return jsonify({"respuesta": "Estamos teniendo un problema técnico temporal. Intenta de nuevo en unos minutos. 💙"})
-        return jsonify({"respuesta": f"Error en el sistema: {str(e)}"})
+        return jsonify({"respuesta": f"Error: {str(e)}"})
 
 # ==========================================
-# RESPUESTA PÚBLICA (LAS 5 HERMANAS)
+# RUTA PÚBLICA RESPONDER (SIN CAMBIOS)
 # ==========================================
 @app.route('/responder', methods=['POST'])
 @limiter.limit("15 per minute")
@@ -1080,13 +1070,11 @@ def responder():
         if len(historial_chat) > MAX_TURNOS * 2: historiales[user_id][hermana] = historial_chat[-MAX_TURNOS * 2:]
         return jsonify({"respuesta": respuesta_final})
     except Exception as e:
-        if any(x in str(e).lower() for x in ["invalid api key", "authentication", "unauthorized", "quota", "rate limit"]):
-            return jsonify({"respuesta": "Estamos teniendo un problema técnico temporal. Intenta de nuevo en unos minutos. 💙"})
         return jsonify({"respuesta": "Hubo un pequeño problema de conexión. ¿Puedes intentar de nuevo? Estoy aquí. 💙"})
 
 @app.errorhandler(429)
 def ratelimit_handler(e):
-    if request.path in ['/responder', '/admin/responder_dev']:
+    if request.path in ['/responder', '/admin/responder_dev', '/admin/estado_miku']:
         return jsonify({"respuesta": "Estás enviando mensajes muy rápido. Espera unos segundos. 💙"}), 429
     elif request.path == '/reportar':
         return jsonify({"error": "Has enviado muchos reportes. Espera un minuto."}), 429
