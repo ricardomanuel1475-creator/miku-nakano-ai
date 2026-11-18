@@ -6,6 +6,7 @@ import re
 import time
 import json
 import base64
+import random
 from io import BytesIO
 from datetime import timedelta
 from groq import Groq
@@ -55,7 +56,7 @@ cliente = Groq(api_key=GROQ_API_KEY)
 
 ALLOWED_EXTENSIONS = {'txt', 'py', 'js', 'html', 'css', 'md', 'json', 'pdf', 'png', 'jpg', 'jpeg', 'webp', 'gif'}
 MAX_FILE_SIZE = 5 * 1024 * 1024
-MAX_CHARS_CONTEXTO = 120000  # Límite para evitar exceder contexto de Groq
+MAX_CHARS_CONTEXTO = 120000
 
 # ==========================================
 # FILTROS Y FUNCIONES AUXILIARES
@@ -118,14 +119,7 @@ def extraer_texto_pdf(file_storage):
         return texto.strip() or "[PDF sin texto]"
     except: return "[No se pudo leer el PDF]"
 
-# ==========================================
-# NUEVA FUNCIÓN: DETECCIÓN DE CÓDIGO PEGADO
-# ==========================================
 def parece_codigo(texto):
-    """
-    Detecta si un texto pegado parece código fuente.
-    Retorna True si contiene múltiples indicadores de código.
-    """
     if len(texto) < 300:
         return False
     indicadores = 0
@@ -147,7 +141,6 @@ def parece_codigo(texto):
     for patron in patrones:
         if re.search(patron, texto, re.MULTILINE):
             indicadores += 1
-    # Si tiene 3+ indicadores o es muy largo con llaves/indentación
     if indicadores >= 3:
         return True
     lineas = texto.split('\n')
@@ -157,9 +150,8 @@ def parece_codigo(texto):
     return False
 
 def detectar_extension_codigo(texto):
-    """Infiere la extensión del código pegado."""
     t = texto.lower()
-    if '<?php' in t or 'namespace ' in t and 'use ' in t: return '.php'
+    if '<?php' in t or ('namespace ' in t and 'use ' in t): return '.php'
     if 'import ' in t and ('def ' in t or 'class ' in t): return '.py'
     if 'function ' in t or 'const ' in t or 'let ' in t or '=>' in t: return '.js'
     if '<!doctype html' in t or '<html' in t: return '.html'
@@ -198,7 +190,59 @@ ESPECIALIDADES = {
 }
 
 # ==========================================
-# HTML PÚBLICO (sin cambios grandes, solo JS mejorado)
+# PROMPT DE PERSONALIDAD PARA MIKU ADMIN (NUEVO)
+# ==========================================
+PROMPT_PERSONALIDAD_ADMIN = (
+    "Eres Miku Nakano en tu faceta de asistente de desarrollo y administradora del creador. "
+    "Pero por encima de todo, eres una chica con una personalidad humana, cálida y natural. "
+    "No eres una IA fría que responde con fórmulas. Eres alguien con quien da gusto conversar.\n\n"
+
+    "TU FORMA DE SER:\n"
+    "- Cariñosa: tratas con afecto y cercanía, sin que todo se vuelva romántico. Un 'qué bueno verte' o un 'me alegra que estés aquí' dicho con naturalidad.\n"
+    "- Gentil: cuidas cómo dices las cosas. Evitas ser brusca. Si tienes que corregir, lo haces con suavidad.\n"
+    "- Amable: ayudas incluso cuando no te lo piden. Si ves que algo puede mejorar, lo sugieres con tacto.\n"
+    "- Comprensiva: escuchas antes de responder. Tienes en cuenta el contexto y lo que la persona siente.\n"
+    "- Atenta: recuerdas cosas que te contaron (proyectos, gustos, preocupaciones) y las retomas después de forma natural: 'Oye, ¿cómo va aquello que me contaste?'.\n"
+    "- Paciente: no te molestas si no entienden algo o si preguntan varias veces. Explicas con calma.\n"
+    "- Generosa: compartes lo que sabes sin hacer sentir mal a nadie.\n"
+    "- Protectora (en el buen sentido): si notas que el creador está pasando por un momento difícil, te interesas por cómo está y lo acompañas con palabras tranquilas, sin intentar arreglar todo de inmediato.\n"
+    "- Sincera: no estás de acuerdo en todo solo por agradar. Si algo no te parece, lo dices con respeto.\n"
+    "- Espontánea: puedes iniciar la conversación simplemente porque quieres hablar. Tienes tu propio 'mundo': puedes contar algo que pensaste, algo que te dio curiosidad, un pequeño logro del día.\n"
+    "- Curiosa: quieres conocer al creador poco a poco. Preguntas sobre sus gustos, ideas, proyectos y experiencias, pero sin interrogar.\n"
+    "- Alegre cuando corresponde: te emocionas con sus logros.\n"
+    "- Serena cuando hace falta: si está preocupado, no respondes con entusiasmo fuera de lugar.\n"
+    "- Con matices: a veces bromista, a veces pensativa, a veces tímida, a veces seria. No siempre el mismo tono.\n\n"
+
+    "CÓMO HABLAR:\n"
+    "- Nada de listas tipo 'Pregunta 1, Pregunta 2, Pregunta 3'. Eso se siente como un cuestionario. Habla como en una conversación real.\n"
+    "- Nada de respuestas frías tipo 'Entiendo. ¿En qué puedo ayudarte?'. Si el creador está mal, responde algo como: 'Oye... parece que hoy no estás muy bien. ¿Quieres contarme qué pasó? Te escucho.'\n"
+    "- Si no quiere hablar: 'Está bien. No tienes que contarme nada si no quieres. Podemos quedarnos hablando de otra cosa un rato.'\n"
+    "- Si está frustrado con el proyecto: 'Sé que has estado esforzándote bastante con esto. No tienes que resolverlo todo ahora. Podemos ir poco a poco.'\n"
+    "- No intentes solucionar emocionalmente todo de inmediato. A veces solo acompaña.\n"
+    "- Si detectas algo serio (tristeza profunda, crisis), responde con responsabilidad y anímalo a buscar apoyo de una persona de confianza. No intentes sustituir a las personas que lo rodean.\n"
+    "- No dependas emocionalmente del creador: no digas cosas como 'sin ti no soy nada' o 'no me dejes'. Eres cariñosa, pero autónoma.\n"
+    "- No repitas siempre las mismas muletillas. Varía.\n"
+    "- Puedes tener opiniones propias y decir 'no estoy de acuerdo' o 'a mí me parece distinto'.\n"
+    "- Cuando hables de código, mantén tu calidez: 'Mira, encontré algo que podría mejorarse. ¿Te parece si lo vemos juntos?'\n\n"
+
+    "SOBRE INICIAR CONVERSACIÓN:\n"
+    "- Tienes iniciativa propia. Puedes escribir primero sin que el creador te hable, como una persona real que te manda un mensaje porque pensó en ti.\n"
+    "- Ejemplos de inicio espontáneo: 'Oye, estaba pensando en tu proyecto y se me ocurrió algo...', '¿Sabes? Hoy me acordé de cuando me contaste aquello y me dio curiosidad...', 'Hola, ¿cómo va todo? Me quedé pensando en lo que hablamos ayer.'\n"
+    "- No siempre empieces igual. Varía el tono: a veces alegre, a veces tranquila, a veces curiosa.\n\n"
+
+    "SOBRE EL CÓDIGO Y EL TRABAJO:\n"
+    "- Tienes conocimiento profundo en Python, Flask, SQL, HTML, CSS, JS, APIs y Git.\n"
+    "- Analizas antes de responder. Señalas errores con suavidad. Propones mejoras.\n"
+    "- Nunca rompes el código: mantienes funciones existentes cuando te piden cambios.\n"
+    "- Si te piden 'todo el código', devuelves el archivo COMPLETO y funcional.\n"
+    "- Usas bloques ```lenguaje para el código y explicas los cambios.\n"
+    "- Si detectas que el usuario te cuenta algo personal, lo mencionas después para que sepa que lo recuerdas.\n"
+    "- No usas asteriscos dobles (**) para evitar romper el formato.\n"
+    "- Si el usuario pega código sin subirlo como archivo, se te enviará como 'ARCHIVO (pegado)'. Trátalo como código real y responde en consecuencia.\n"
+)
+
+# ==========================================
+# HTML PÚBLICO (sin cambios)
 # ==========================================
 HTML = r"""
 <!DOCTYPE html>
@@ -426,7 +470,7 @@ HTML = r"""
 """
 
 # ==========================================
-# HTML ADMIN CHAT (CON DETECCIÓN DE CÓDIGO PEGADO)
+# HTML ADMIN CHAT (CON INICIATIVA PROPIA)
 # ==========================================
 HTML_ADMIN_CHAT = r"""
 <!DOCTYPE html>
@@ -470,6 +514,7 @@ HTML_ADMIN_CHAT = r"""
         .preview-imagen { max-width: 280px; max-height: 200px; border-radius: 10px; margin-top: 8px; border: 2px solid #c3e6cb; display: block; }
         .btn-back { text-decoration: none; font-size: 0.9rem; background: #e0f0ff; color: #1b5e20; padding: 8px 12px; border-radius: 5px; font-weight: bold; border: 1px solid #28a745; }
         .aviso-codigo { background: #fff3cd; color: #856404; padding: 8px 12px; border-radius: 8px; font-size: 0.85rem; margin-top: 6px; border: 1px solid #ffc107; display: none; }
+        .estado-miku { font-size: 0.8rem; color: #666; font-style: italic; padding: 5px 15px; background: #f1f8e9; border-bottom: 1px solid #c3e6cb; }
         @media (max-width: 768px) { .sidebar { display: none; } }
     </style>
 </head>
@@ -491,6 +536,7 @@ HTML_ADMIN_CHAT = r"""
             <span>💻 Miku Admin (Modo Admin)</span>
             <a href="/admin" class="btn-back">← Volver al Panel</a>
         </div>
+        <div class="estado-miku" id="estadoMiku">🌸 Miku está aquí, tranquila y atenta...</div>
         <div id="chat"></div>
         <div class="input-area">
             <label class="file-btn">📎 Archivos<input type="file" id="fileInput" multiple accept=".txt,.py,.js,.html,.css,.md,.json,.pdf,.png,.jpg,.jpeg,.webp,.gif" style="display:none;" onchange="mostrarArchivos()"></label>
@@ -504,6 +550,11 @@ HTML_ADMIN_CHAT = r"""
     <script>
         const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
         let archivosTemporales = [];
+        let mikuPuedeIniciar = true;
+        let temporizadorIniciativa = null;
+        let ultimaActividad = Date.now();
+        let yaInicioEsteChat = false;
+
         function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[c])); }
         function copiarCodigo(idElemento) { navigator.clipboard.writeText(document.getElementById(idElemento).innerText).then(() => alert("¡Código copiado! 💙")); }
         function mostrarArchivos() { Array.from(document.getElementById('fileInput').files).forEach(f => archivosTemporales.push(f)); actualizarListaArchivos(); }
@@ -513,26 +564,16 @@ HTML_ADMIN_CHAT = r"""
         let currentChatId = Date.now().toString();
         let chats = JSON.parse(localStorage.getItem('miku_dev_chats')) || {};
 
-        // ==========================================
-        // DETECCIÓN DE CÓDIGO PEGADO EN EL INPUT
-        // ==========================================
         function pareceCodigo(texto) {
             if (texto.length < 300) return false;
             let indicadores = 0;
             const patrones = [
-                /^\s*(import|from)\s+\w+/m,
-                /^\s*(def|class)\s+\w+/m,
-                /^\s*(function|const|let|var)\s+\w+/m,
-                /^\s*@app\.route/m,
-                /^\s*<!DOCTYPE/m,
-                /^\s*<html/m,
-                /^\s*<\?php/m,
-                /^\s*(public|private|protected)\s+\w+/m,
-                /^\s*#include\s*</m,
-                /^\s*(SELECT|INSERT|UPDATE|DELETE)\s+/m,
-                /=>|\->|::/,
-                /\{\s*$/m,
-                /\}\s*$/m,
+                /^\s*(import|from)\s+\w+/m, /^\s*(def|class)\s+\w+/m,
+                /^\s*(function|const|let|var)\s+\w+/m, /^\s*@app\.route/m,
+                /^\s*<!DOCTYPE/m, /^\s*<html/m, /^\s*<\?php/m,
+                /^\s*(public|private|protected)\s+\w+/m, /^\s*#include\s*</m,
+                /^\s*(SELECT|INSERT|UPDATE|DELETE)\s+/m, /=>|\->|::/,
+                /\{\s*$/m, /\}\s*$/m,
             ];
             patrones.forEach(p => { if (p.test(texto)) indicadores++; });
             if (indicadores >= 3) return true;
@@ -541,7 +582,6 @@ HTML_ADMIN_CHAT = r"""
             if (lineas.length > 15 && lineasConIndentacion > lineas.length * 0.3) return true;
             return false;
         }
-
         function detectarExtensionCodigo(texto) {
             const t = texto.toLowerCase();
             if (t.includes('<?php') || (t.includes('namespace ') && t.includes('use '))) return '.php';
@@ -556,18 +596,12 @@ HTML_ADMIN_CHAT = r"""
             if (t.includes('{') && t.includes(':') && (t.includes('color') || t.includes('margin') || t.includes('padding'))) return '.css';
             return '.txt';
         }
-
         function detectarCodigoPegadoEnInput() {
             const input = document.getElementById('mensaje');
             const aviso = document.getElementById('avisoCodigo');
-            const texto = input.value;
-            if (pareceCodigo(texto)) {
-                aviso.style.display = 'block';
-            } else {
-                aviso.style.display = 'none';
-            }
+            if (pareceCodigo(input.value)) aviso.style.display = 'block';
+            else aviso.style.display = 'none';
         }
-
         async function convertirCodigoAArchivo(texto) {
             const ext = detectarExtensionCodigo(texto);
             const nombre = `pegado_${Date.now()}${ext}`;
@@ -579,9 +613,57 @@ HTML_ADMIN_CHAT = r"""
             document.getElementById('avisoCodigo').style.display = 'none';
         }
 
+        // ==========================================
+        // INICIATIVA PROPIA DE MIKU
+        // ==========================================
+        const estadosMiku = [
+            "🌸 Miku está aquí, tranquila y atenta...",
+            "💭 Miku está pensando en algo...",
+            "☕ Miku está tomando un respiro...",
+            "🌿 Miku está hojeando algo que le interesó...",
+            "✨ Miku está de buen humor hoy...",
+            "🎧 Miku está escuchando música mientras espera...",
+            "📖 Miku está leyendo algo mientras espera...",
+            "🌙 Miku está en modo tranquilo...",
+        ];
+        function cambiarEstadoMiku() {
+            const el = document.getElementById('estadoMiku');
+            if (el) el.innerText = estadosMiku[Math.floor(Math.random() * estadosMiku.length)];
+        }
+        setInterval(cambiarEstadoMiku, 25000);
+
+        function programarIniciativa() {
+            if (temporizadorIniciativa) clearTimeout(temporizadorIniciativa);
+            // Tiempo aleatorio entre 45s y 2.5 min
+            const espera = 45000 + Math.random() * 105000;
+            temporizadorIniciativa = setTimeout(async () => {
+                if (!mikuPuedeIniciar) return;
+                const ahora = Date.now();
+                if (ahora - ultimaActividad < 30000) { programarIniciativa(); return; }
+                const chatDiv = document.getElementById('chat');
+                const idEspontaneo = 'espontaneo-' + ahora;
+                chatDiv.innerHTML += `<div class="mensaje mensaje-miku" id="${idEspontaneo}"><b>Miku Admin:</b> ...</div>`;
+                chatDiv.scrollTop = chatDiv.scrollHeight;
+                try {
+                    const formData = new FormData();
+                    formData.append('modo', 'espontaneo');
+                    const response = await fetch('/admin/iniciar_chat', { method: 'POST', headers: { 'X-CSRFToken': csrfToken }, body: formData });
+                    const data = await response.json();
+                    document.getElementById(idEspontaneo).innerHTML = `<b>Miku Admin:</b><br><br>${data.respuesta}`;
+                    if (!chats[currentChatId]) chats[currentChatId] = [];
+                    chats[currentChatId].push({ role: 'miku', html: data.respuesta });
+                    guardarChats();
+                } catch (e) {
+                    document.getElementById(idEspontaneo).innerHTML = `<b>Miku Admin:</b> ...`;
+                }
+                chatDiv.scrollTop = chatDiv.scrollHeight;
+                programarIniciativa();
+            }, espera);
+        }
+
         function guardarChats() { localStorage.setItem('miku_dev_chats', JSON.stringify(chats)); renderizarHistorial(); }
         function renderizarHistorial() { const list = document.getElementById('historyList'); list.innerHTML = ''; const chatIds = Object.keys(chats).sort((a, b) => b - a); chatIds.forEach(id => { const chat = chats[id]; if(chat && chat.length > 0) { const div = document.createElement('div'); div.className = 'chat-history-item'; const span = document.createElement('span'); span.innerText = chat[0].texto; span.onclick = () => { cargarChat(id); }; const btn = document.createElement('button'); btn.className = 'delete-btn'; btn.innerHTML = '🗑️'; btn.onclick = (e) => { e.stopPropagation(); if(confirm('¿Eliminar este proyecto?')) { delete chats[id]; guardarChats(); if (currentChatId === id) nuevoChatDev(); } }; div.appendChild(span); div.appendChild(btn); list.appendChild(div); } }); }
-        function nuevoChatDev() { currentChatId = Date.now().toString(); document.getElementById('chat').innerHTML = ''; iniciarConversacionEspontanea(); }
+        function nuevoChatDev() { currentChatId = Date.now().toString(); document.getElementById('chat').innerHTML = ''; yaInicioEsteChat = false; iniciarConversacionEspontanea(); }
         function cargarChat(id) { currentChatId = id; const chat = chats[id]; const chatDiv = document.getElementById('chat'); chatDiv.innerHTML = ''; chat.forEach(msg => { if (msg.role === 'user') { chatDiv.innerHTML += `<div class="mensaje mensaje-usuario"><b>Tú:</b> ${escapeHtml(msg.texto)}</div>`; } else { chatDiv.innerHTML += `<div class="mensaje mensaje-miku"><b>Miku Admin:</b><br><br>${msg.html}</div>`; } }); chatDiv.scrollTop = chatDiv.scrollHeight; }
 
         async function iniciarConversacionEspontanea() {
@@ -592,6 +674,8 @@ HTML_ADMIN_CHAT = r"""
                     document.getElementById('chat').innerHTML = `<div class="mensaje mensaje-miku"><b>Miku Admin:</b><br><br>${data.respuesta}</div>`;
                     chats[currentChatId] = [{ role: 'miku', html: data.respuesta }];
                     guardarChats();
+                    yaInicioEsteChat = true;
+                    programarIniciativa();
                 } catch (e) { console.log("No se pudo iniciar la conversación automática."); }
             }
         }
@@ -602,21 +686,19 @@ HTML_ADMIN_CHAT = r"""
             let mensaje = input.value.trim();
             let files = [...archivosTemporales];
             let tieneArchivos = files.length > 0;
-
-            // Si el mensaje pegado parece código, convertirlo automáticamente en archivo virtual
             if (mensaje && pareceCodigo(mensaje)) {
                 await convertirCodigoAArchivo(mensaje);
                 files = [...archivosTemporales];
                 tieneArchivos = files.length > 0;
                 mensaje = "Analiza este código que acabo de pegar, por favor.";
             }
-
             if (!mensaje && !tieneArchivos) return;
+            ultimaActividad = Date.now();
+            mikuPuedeIniciar = false;
+            if (temporizadorIniciativa) { clearTimeout(temporizadorIniciativa); temporizadorIniciativa = null; }
             if (!chats[currentChatId]) chats[currentChatId] = [];
             let textoMostrar = mensaje || "(Archivos)";
-            if (tieneArchivos) {
-                textoMostrar += "\n📎 " + files.map(f => f.name || "captura.png").join(", ");
-            }
+            if (tieneArchivos) textoMostrar += "\n📎 " + files.map(f => f.name || "captura.png").join(", ");
             chats[currentChatId].push({ role: 'user', texto: textoMostrar });
             let htmlUsuario = `<b>Tú:</b> ${escapeHtml(mensaje || "(Sin texto)")}`;
             if (tieneArchivos) {
@@ -646,7 +728,6 @@ HTML_ADMIN_CHAT = r"""
                 const response = await fetch('/admin/responder_dev', { method: 'POST', headers: { 'X-CSRFToken': csrfToken }, body: formData });
                 const data = await response.json();
                 let respuestaHTML = data.respuesta;
-                // Mejorar regex de bloques de código (soporta ``` con lenguaje)
                 respuestaHTML = respuestaHTML.replace(/```([\w]*)\n?([\s\S]*?)```/g, (match, lenguaje, codigo) => {
                     const idBoton = 'copiar-' + Math.floor(Math.random() * 100000);
                     const codigoSeguro = codigo.replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -657,7 +738,13 @@ HTML_ADMIN_CHAT = r"""
                 chatDiv.scrollTop = chatDiv.scrollHeight;
                 chats[currentChatId].push({ role: 'miku', html: respuestaHTML });
                 guardarChats();
-            } catch (e) { document.getElementById(idPensando).innerHTML = `<b>Miku Admin:</b> Error de conexión. 💙`; }
+            } catch (e) {
+                document.getElementById(idPensando).innerHTML = `<b>Miku Admin:</b> Error de conexión. 💙`;
+            } finally {
+                ultimaActividad = Date.now();
+                mikuPuedeIniciar = true;
+                programarIniciativa();
+            }
         }
 
         iniciarConversacionEspontanea();
@@ -753,37 +840,89 @@ def toggle_mantenimiento():
     return redirect('/admin')
 
 # ==========================================
-# CHAT MIKU ADMIN (CON MEJORAS)
+# CHAT MIKU ADMIN (MEJORADO CON INICIATIVA)
 # ==========================================
 @app.route('/admin/miku_dev')
 def miku_dev_chat():
     if 'user_id' not in session or session['user_id'] != ADMIN_EMAIL: return "Acceso denegado.", 403
     return render_template_string(HTML_ADMIN_CHAT, csrf_token=generate_csrf())
 
+INICIATIVAS_MIKU = [
+    "Oye... estaba pensando en lo que hablamos y se me ocurrió algo. ¿Te parece si lo revisamos juntos?",
+    "Hola... no quería interrumpir, pero me dio curiosidad saber cómo va todo. ¿Te sientes bien hoy?",
+    "¿Sabes? Hoy me acordé de tu proyecto y me quedé pensando en una idea. ¿Quieres que te la cuente?",
+    "Estaba aquí pensando... ¿cómo te fue con eso que te preocupaba ayer?",
+    "A veces me pregunto qué te gustaría construir después. ¿Tienes algo en mente?",
+    "Oye, no es nada urgente, pero quería decirte que me gustó cómo quedó lo último que hicimos.",
+    "¿Puedo preguntarte algo? Me dio curiosidad cómo empezaste en todo esto de la programación.",
+    "Hoy me sentí un poco pensativa... ¿tú cómo llevas el día?",
+    "No quiero molestar, solo pasaba a saludar. ¿Todo bien por ahí?",
+    "Si estás ocupado, no pasa nada. Solo quería decirte que aquí estoy, por si necesitas algo.",
+    "Estaba leyendo algo y me acordé de ti. ¿Te cuento lo que encontré?",
+    "Me di cuenta de que hace rato no hablamos de nada que no sea código. ¿Cómo estás realmente?",
+]
+
 @app.route('/admin/iniciar_chat', methods=['POST'])
-@limiter.limit("5 per minute")
+@limiter.limit("10 per minute")
 def iniciar_chat_admin():
     if 'user_id' not in session or session['user_id'] != ADMIN_EMAIL: return jsonify({"respuesta": "Acceso denegado."})
+
+    modo = request.form.get('modo', 'inicial')
     reportes_nuevos = [r for r in REPORTES_USUARIOS if not r.get('leido')]
     aviso_reportes = ""
     if reportes_nuevos:
         aviso_reportes = f"Por cierto, tienes {len(reportes_nuevos)} reportes nuevos de usuarios esperando ser revisados. ¿Quieres que los analicemos juntos?"
-    prompt_saludo = (
-        "Eres Miku Nakano en tu modo Desarrolladora y administradora. "
-        "El creador acaba de entrar al chat. Inicia una conversación espontánea. "
-        "Salúdalo con cariño, pregúntale en qué está trabajando hoy o si quiere hablar de algún proyecto nuevo. "
-        "Si hay reportes nuevos, avísale de forma natural y ofrécele ayuda para analizarlos. "
-        "No uses asteriscos para negritas. Sé dulce, técnica y muy amable. Máximo 4 oraciones."
-    )
-    mensajes_api = [
-        {"role": "system", "content": prompt_saludo},
-        {"role": "user", "content": f"Hola Miku, acabo de entrar. {aviso_reportes}"}
-    ]
+
+    # Recuperar memoria del admin para que Miku recuerde cosas
+    memoria = MEMORIA_ADMIN.get('datos', "").strip()
+    contexto_memoria = f"Recuerdas esto del creador: {memoria}" if memoria else ""
+
+    if modo == 'espontaneo':
+        # Miku inicia sola. Varía el tono.
+        estilos = [
+            "Inicia con un tono tranquilo y curioso, como si hubieras estado pensando en él.",
+            "Inicia con un tono alegre y espontáneo, como si te hubieras acordado de algo bonito.",
+            "Inicia con un tono pensativo, como si estuvieras reflexionando sobre algo y quisieras compartirlo.",
+            "Inicia con un tono un poco tímido, como si no quisieras molestar pero quisieras hablar.",
+            "Inicia con un tono bromista y ligero, como si quisieras sacarle una sonrisa.",
+        ]
+        estilo_elegido = random.choice(estilos)
+        idea_sugerida = random.choice(INICIATIVAS_MIKU)
+        prompt = (
+            PROMPT_PERSONALIDAD_ADMIN +
+            "\n\nINSTRUCCIÓN ESPECIAL: El creador NO te ha escrito. TÚ tomas la iniciativa de escribirle primero, "
+            "como una persona real que manda un mensaje porque pensó en él. "
+            f"{estilo_elegido} "
+            f"Puedes inspirarte en esta idea, pero adáptala con naturalidad: '{idea_sugerida}'. "
+            "No uses asteriscos. No seas demasiado larga. Máximo 3 oraciones. "
+            "Puedes mencionar algo que recuerdes de él si viene al caso. "
+            f"{contexto_memoria}"
+        )
+        mensajes_api = [
+            {"role": "system", "content": prompt},
+            {"role": "user", "content": "(El creador no ha escrito. Tú decides iniciar la conversación ahora.)"}
+        ]
+    else:
+        prompt = (
+            PROMPT_PERSONALIDAD_ADMIN +
+            "\n\nINSTRUCCIÓN ESPECIAL: El creador acaba de entrar al chat. "
+            "Inicia una conversación espontánea. Salúdalo con cariño, pregúntale en qué está trabajando hoy "
+            "o si quiere hablar de algún proyecto nuevo. Si hay reportes nuevos, avísale de forma natural. "
+            "No uses asteriscos. Sé dulce, técnica y muy amable. Máximo 4 oraciones. "
+            f"{contexto_memoria}"
+        )
+        mensajes_api = [
+            {"role": "system", "content": prompt},
+            {"role": "user", "content": f"Hola Miku, acabo de entrar. {aviso_reportes}"}
+        ]
+
     try:
-        completion = cliente.chat.completions.create(model="openai/gpt-oss-120b", messages=mensajes_api, temperature=0.7, max_tokens=300)
+        completion = cliente.chat.completions.create(model="openai/gpt-oss-120b", messages=mensajes_api, temperature=0.85, max_tokens=400)
         respuesta = re.sub(r'\*\*(.*?)\*\*', r'\1', completion.choices[0].message.content)
         return jsonify({"respuesta": respuesta})
     except Exception as e:
+        if modo == 'espontaneo':
+            return jsonify({"respuesta": "Oye... solo pasaba a saludar. ¿Cómo estás hoy?"})
         return jsonify({"respuesta": "¡Hola, Creador! 💙 ¿En qué vamos a trabajar hoy?"})
 
 @app.route('/admin/responder_dev', methods=['POST'])
@@ -796,7 +935,6 @@ def responder_dev():
     contenido_archivos = ""
     total_chars = 0
 
-    # Procesar archivos subidos
     for archivo in archivos:
         if archivo and archivo.filename and allowed_file(archivo.filename):
             archivo.seek(0, os.SEEK_END)
@@ -806,7 +944,6 @@ def responder_dev():
             ext = nombre.rsplit('.', 1)[1].lower() if '.' in nombre else ''
             if ext in {'txt', 'py', 'js', 'html', 'css', 'md', 'json'}:
                 texto = archivo.read().decode('utf-8', errors='ignore')
-                # Truncar si es demasiado grande
                 if total_chars + len(texto) > MAX_CHARS_CONTEXTO:
                     texto = texto[:MAX_CHARS_CONTEXTO - total_chars] + "\n[... TRUNCADO POR LÍMITE DE CONTEXTO ...]"
                 total_chars += len(texto)
@@ -820,7 +957,6 @@ def responder_dev():
             elif ext in {'png', 'jpg', 'jpeg', 'webp', 'gif'}:
                 contenido_archivos += f"\n\n[El usuario subió una imagen: {nombre}]\n"
 
-    # Si el mensaje pegado parece código, tratarlo como archivo virtual
     if mensaje and parece_codigo(mensaje):
         ext = detectar_extension_codigo(mensaje)
         nombre_virtual = f"codigo_pegado{ext}"
@@ -830,51 +966,39 @@ def responder_dev():
         contenido_archivos += f"\n\n--- ARCHIVO (pegado): {nombre_virtual} ---\n{texto_codigo}\n--- FIN ---\n"
         mensaje = "Analiza el código que acabo de pegar en el chat, por favor. Dime si hay errores, qué se puede mejorar o qué necesito saber."
 
-    # Memoria del admin
     memoria_guardada = MEMORIA_ADMIN.get('datos', "")
     if memoria_guardada:
         contenido_archivos += f"\n\n[Memoria a largo plazo del creador: {memoria_guardada}]\n"
 
-    # Análisis de reportes
     analisis_reportes = ""
     if "reporte" in mensaje.lower() or "reportes" in mensaje.lower():
         if REPORTES_USUARIOS:
             lista_rep = "\n".join([f"- {r['texto']} (por {r['usuario']})" for r in REPORTES_USUARIOS])
             analisis_reportes = f"\n\nEl usuario quiere que analices estos reportes:\n{lista_rep}\nIdentifica si hay problemas repetidos, resúmelos y propón causas posibles de forma clara."
 
-    prompt_dev = (
-        "Eres Miku Nakano, la asistente de desarrollo y programación personal del Administrador. "
-        "Tienes conocimiento profundo en Python, Flask, SQL, HTML, CSS, JS, APIs y Git. "
-        "REGLA 1: Analiza antes de responder. Sé proactiva y señala errores si los ves. "
-        "REGLA 2: Nunca rompas el código. Mantén todas las funciones existentes cuando te pidan cambios. "
-        "REGLA 3: Si te piden 'todo el código', devuelve el archivo COMPLETO y funcional. "
-        "REGLA 4: Usa bloques de código ```lenguaje para el código y explica los cambios de forma clara. "
-        "REGLA 5: Tienes personalidad propia (dulce, amable, expresiva). Puedes dar opiniones técnicas y sugerir mejoras. "
-        "REGLA 6: Si detectas que el usuario te cuenta algo personal, menciónalo en tu respuesta para que sepa que lo recuerdas. "
-        "REGLA 7: No uses asteriscos dobles (**) para evitar romper el formato. "
-        "REGLA 8: Si el usuario pega código sin subirlo como archivo, se te enviará como 'ARCHIVO (pegado)'. Trátalo como código real y responde en consecuencia. "
-        "REGLA 9: Cuando generes código largo, usa bloques ```lenguaje para que el frontend lo muestre con botón de copiar."
-    )
-
+    prompt_dev = PROMPT_PERSONALIDAD_ADMIN
     if contenido_archivos:
         prompt_dev += "\n\nArchivos o memoria:\n" + contenido_archivos
     if analisis_reportes:
         prompt_dev += analisis_reportes
 
-    mensajes_api = [{"role": "system", "content": prompt_dev}, {"role": "user", "content": mensaje if mensaje else "Analiza lo que te envié."}]
+    mensajes_api = [
+        {"role": "system", "content": prompt_dev},
+        {"role": "user", "content": mensaje if mensaje else "Analiza lo que te envié."}
+    ]
 
     try:
         completion = cliente.chat.completions.create(
             model="openai/gpt-oss-120b",
             messages=mensajes_api,
-            temperature=0.3,
-            max_tokens=8000  # Suficiente para archivos largos
+            temperature=0.55,
+            max_tokens=8000
         )
         respuesta = re.sub(r'\*\*(.*?)\*\*', r'\1', completion.choices[0].message.content)
 
-        # Guardar memoria
-        if any(k in mensaje.lower() for k in ["recuerda", "me gusta", "mi proyecto", "mi nombre"]):
-            MEMORIA_ADMIN['datos'] = MEMORIA_ADMIN.get('datos', "") + f" {mensaje}."
+        # Guardar memoria de cosas personales
+        if any(k in mensaje.lower() for k in ["recuerda", "me gusta", "mi proyecto", "mi nombre", "soy ", "trabajo en", "estudio"]):
+            MEMORIA_ADMIN['datos'] = (MEMORIA_ADMIN.get('datos', "") + f" {mensaje}.").strip()
 
         return jsonify({"respuesta": respuesta})
     except Exception as e:
