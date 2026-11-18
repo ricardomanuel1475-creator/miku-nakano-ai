@@ -988,7 +988,7 @@ def responder_dev():
             model="openai/gpt-oss-120b",
             messages=mensajes_api,
             temperature=0.55,
-            max_tokens=2800
+            max_tokens=8000
         )
         respuesta = re.sub(r'\*\*(.*?)\*\*', r'\1', completion.choices[0].message.content)
 
