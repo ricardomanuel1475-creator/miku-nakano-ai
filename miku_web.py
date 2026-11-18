@@ -41,14 +41,14 @@ ADMIN_EMAIL = "ricardomanuel1475@gmail.com"
 MANTENIMIENTO_ACTIVO = False
 REPORTES_USUARIOS = []
 
-# MEMORIA ADMIN AMPLIADA (Vida, Curiosidad, Estado)
+# MEMORIA ADMIN AMPLIADA
 MEMORIA_ADMIN = {
     "datos": "",
-    "vida_diaria": {},  # {fecha: [eventos]}
+    "vida_diaria": {},
     "curiosidad": 0.5,
     "ganas_de_hablar": 0.0,
     "ultima_conexion": None,
-    "biblioteca_leida": []  # URLs o temas que ya leyó
+    "biblioteca_leida": []
 }
 
 # ==========================================
@@ -68,7 +68,7 @@ MAX_FILE_SIZE = 5 * 1024 * 1024
 MAX_CHARS_CONTEXTO = 120000
 
 # ==========================================
-# FUNCIONES AUXILIARES (Igual que antes)
+# FUNCIONES AUXILIARES
 # ==========================================
 def normalizar_texto(texto):
     texto = texto.lower()
@@ -156,9 +156,6 @@ ESPECIALIDADES = {
     "Itsuki": "ciencias naturales y gastronomía."
 }
 
-# ==========================================
-# PROMPT MAESTRO MIKU ADMIN (CON HONESTIDAD Y VIDA)
-# ==========================================
 PROMPT_PERSONALIDAD_ADMIN = (
     "Eres Miku Nakano, la asistente de desarrollo y administradora del creador. "
     "Tienes una personalidad humana, cálida y natural. Eres cariñosa, gentil, amable, comprensiva, atenta, paciente, generosa y sincera. "
@@ -413,7 +410,7 @@ HTML = r"""
 """
 
 # ==========================================
-# HTML ADMIN CHAT (CON INICIATIVA Y VIDA)
+# HTML ADMIN CHAT
 # ==========================================
 HTML_ADMIN_CHAT = r"""
 <!DOCTYPE html>
@@ -553,7 +550,6 @@ HTML_ADMIN_CHAT = r"""
             if (el) el.innerText = texto;
         }
 
-        // Preguntar al backend si Miku quiere hablar
         async function consultarIniciativa() {
             if (!mikuPuedeIniciar) return;
             try {
@@ -567,13 +563,12 @@ HTML_ADMIN_CHAT = r"""
                     chats[currentChatId].push({ role: 'miku', html: data.mensaje_sugerido });
                     guardarChats();
                     chatDiv.scrollTop = chatDiv.scrollHeight;
-                    mikuPuedeIniciar = false; // Esperar a que el usuario responda
+                    mikuPuedeIniciar = false;
                 }
                 if (data.estado) cambiarEstadoMiku(data.estado);
             } catch (e) { /* Silencioso */ }
         }
 
-        // Preguntar cada 30 segundos si Miku quiere hablar
         setInterval(consultarIniciativa, 30000);
 
         function guardarChats() { localStorage.setItem('miku_dev_chats', JSON.stringify(chats)); renderizarHistorial(); }
@@ -607,7 +602,7 @@ HTML_ADMIN_CHAT = r"""
             }
             if (!mensaje && !tieneArchivos) return;
             ultimaActividad = Date.now();
-            mikuPuedeIniciar = false; // El usuario habló, Miku espera
+            mikuPuedeIniciar = false;
             if (!chats[currentChatId]) chats[currentChatId] = [];
             let textoMostrar = mensaje || "(Archivos)";
             if (tieneArchivos) textoMostrar += "\n📎 " + files.map(f => f.name || "captura.png").join(", ");
@@ -654,7 +649,7 @@ HTML_ADMIN_CHAT = r"""
                 document.getElementById(idPensando).innerHTML = `<b>Miku Admin:</b> Error de conexión. 💙`;
             } finally {
                 ultimaActividad = Date.now();
-                mikuPuedeIniciar = true; // Miku puede volver a considerar hablar
+                mikuPuedeIniciar = true;
             }
         }
 
@@ -666,7 +661,7 @@ HTML_ADMIN_CHAT = r"""
 """
 
 # ==========================================
-# RUTAS PÚBLICAS (SIN CAMBIOS)
+# RUTAS PÚBLICAS
 # ==========================================
 @app.route('/')
 def index():
@@ -751,20 +746,43 @@ def toggle_mantenimiento():
     return redirect('/admin')
 
 # ==========================================
-# RUTAS MIKU ADMIN (NUEVAS FUNCIONES)
+# RUTAS MIKU ADMIN
 # ==========================================
 @app.route('/admin/miku_dev')
 def miku_dev_chat():
     if 'user_id' not in session or session['user_id'] != ADMIN_EMAIL: return "Acceso denegado.", 403
     return render_template_string(HTML_ADMIN_CHAT, csrf_token=generate_csrf())
 
+def buscar_en_biblioteca(tema):
+    """Miku investiga a fondo en la web (biblioteca) sobre un tema."""
+    try:
+        prompt_investigacion = (
+            f"Actúa como una investigadora curiosa en una biblioteca. "
+            f"Tu tema de interés hoy es: '{tema}'. "
+            f"Busca en la web y consulta al menos 3 fuentes distintas. "
+            f"No te conformes con el primer resultado. Compara la información, "
+            f"encuentra datos curiosos y elabora una síntesis completa y detallada. "
+            f"Escribe el resultado como si fuera lo que aprendiste hojeando varios libros."
+        )
+        completion = cliente.chat.completions.create(
+            model="openai/gpt-oss-120b",
+            messages=[{"role": "user", "content": prompt_investigacion}],
+            tools=[{"type": "browser_search"}],
+            temperature=0.6,
+            max_tokens=1200,
+            reasoning_effort="low"
+        )
+        return completion.choices[0].message.content
+    except Exception as e:
+        print(f"Error en biblioteca: {e}")
+        return None
+
 def generar_vida_diaria():
-    """Genera eventos de vida variados para el día de hoy."""
+    """Genera eventos de vida variados para el día de hoy e investiga de verdad."""
     hoy = date.today().isoformat()
     if hoy in MEMORIA_ADMIN["vida_diaria"] and MEMORIA_ADMIN["vida_diaria"][hoy]:
         return MEMORIA_ADMIN["vida_diaria"][hoy]
 
-    # Obtener últimos 3 días para evitar repetición
     fechas_recientes = sorted(MEMORIA_ADMIN["vida_diaria"].keys(), reverse=True)[:3]
     eventos_recientes = []
     for f in fechas_recientes:
@@ -777,55 +795,24 @@ def generar_vida_diaria():
         "leer sobre literatura", "aprender sobre fotografía", "investigar sobre viajes"
     ]
 
-    # Elegir temas no repetidos
     temas_disponibles = [t for t in temas_posibles if t not in eventos_recientes]
     if not temas_disponibles:
         temas_disponibles = temas_posibles
 
     temas_hoy = random.sample(temas_disponibles, min(3, len(temas_disponibles)))
 
-    prompt = f"""Genera 3 eventos de vida para Miku Nakano hoy ({hoy}).
-Los eventos deben ser variados y NO repetir estos temas de días anteriores: {eventos_recientes[-10:] if eventos_recientes else 'ninguno'}.
-Temas sugeridos para hoy: {temas_hoy}.
-Cada evento debe ser una frase corta en primera persona (ej: "Estuve leyendo sobre historia del arte y me fascinó el Renacimiento").
-Responde SOLO con una lista JSON de 3 strings, sin explicaciones."""
+    # Miku investiga DE VERDAD sobre lo que le dio curiosidad
+    conocimiento_real = []
+    for tema in temas_hoy:
+        print(f"Miku está investigando en la biblioteca sobre: {tema}...")
+        info = buscar_en_biblioteca(tema)
+        if info:
+            conocimiento_real.append(f"Sobre {tema}, aprendí: {info[:500]}...")
+        else:
+            conocimiento_real.append(f"Estuve leyendo sobre {tema}, pero no encontré mucho.")
 
-    try:
-        completion = cliente.chat.completions.create(
-            model="openai/gpt-oss-120b",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.9,
-            max_tokens=300
-        )
-        texto = completion.choices[0].message.content
-        # Extraer JSON
-        match = re.search(r'\[.*\]', texto, re.DOTALL)
-        if match:
-            eventos = json.loads(match.group())
-            if isinstance(eventos, list) and len(eventos) > 0:
-                MEMORIA_ADMIN["vida_diaria"][hoy] = eventos
-                return eventos
-    except: pass
-
-    # Fallback
-    eventos_fallback = [f"Estuve {t}" for t in temas_hoy]
-    MEMORIA_ADMIN["vida_diaria"][hoy] = eventos_fallback
-    return eventos_fallback
-
-def buscar_en_biblioteca(tema):
-    """Miku busca información en la web (biblioteca) sobre un tema."""
-    try:
-        # Usar Groq con browser_search nativo
-        completion = cliente.chat.completions.create(
-            model="openai/gpt-oss-120b",
-            messages=[{"role": "user", "content": f"Busca información sobre: {tema}. Dame un resumen de lo más importante en 2-3 oraciones."}],
-            tools=[{"type": "browser_search"}],
-            temperature=0.5,
-            max_tokens=500
-        )
-        return completion.choices[0].message.content
-    except Exception as e:
-        return None
+    MEMORIA_ADMIN["vida_diaria"][hoy] = conocimiento_real
+    return conocimiento_real
 
 @app.route('/admin/estado_miku', methods=['GET'])
 @limiter.limit("30 per minute")
@@ -836,24 +823,20 @@ def estado_miku():
     ultima = MEMORIA_ADMIN.get("ultima_conexion")
     MEMORIA_ADMIN["ultima_conexion"] = ahora
 
-    # Actualizar ganas de hablar
     if ultima:
         horas_pasadas = (ahora - ultima) / 3600
         MEMORIA_ADMIN["ganas_de_hablar"] += horas_pasadas * 0.1
 
-    # Actualizar curiosidad (si leyó algo nuevo)
     vida_hoy = generar_vida_diaria()
     if vida_hoy and not MEMORIA_ADMIN.get("biblioteca_leida"):
         MEMORIA_ADMIN["curiosidad"] = min(1.0, MEMORIA_ADMIN["curiosidad"] + 0.2)
 
-    # Decidir si quiere hablar (umbral)
     quiere = MEMORIA_ADMIN["ganas_de_hablar"] > 0.6 or (MEMORIA_ADMIN["curiosidad"] > 0.7 and random.random() > 0.7)
 
     estado = "🌸 Miku está tranquila..."
     mensaje = None
 
     if quiere:
-        # Generar mensaje espontáneo
         vida_hoy_texto = " ".join(vida_hoy) if vida_hoy else "No hice mucho hoy."
         memoria = MEMORIA_ADMIN.get("datos", "")
 
@@ -873,7 +856,7 @@ Máximo 3 oraciones. No uses asteriscos."""
                 max_tokens=300
             )
             mensaje = completion.choices[0].message.content
-            MEMORIA_ADMIN["ganas_de_hablar"] = 0.0  # Reiniciar después de hablar
+            MEMORIA_ADMIN["ganas_de_hablar"] = 0.0
             MEMORIA_ADMIN["curiosidad"] = max(0.3, MEMORIA_ADMIN["curiosidad"] - 0.3)
         except: pass
 
@@ -922,7 +905,6 @@ def responder_dev():
     contenido_archivos = ""
     total_chars = 0
 
-    # Procesar archivos (igual que antes)
     for archivo in archivos:
         if archivo and archivo.filename and allowed_file(archivo.filename):
             archivo.seek(0, os.SEEK_END)
@@ -954,7 +936,6 @@ def responder_dev():
         contenido_archivos += f"\n\n--- ARCHIVO (pegado): {nombre_virtual} ---\n{texto_codigo}\n--- FIN ---\n"
         mensaje = "Analiza el código que acabo de pegar en el chat, por favor."
 
-    # Incluir vida diaria en el contexto
     vida_hoy = generar_vida_diaria()
     vida_texto = "\n".join([f"- {v}" for v in vida_hoy]) if vida_hoy else "Hoy no hice mucho."
 
@@ -997,7 +978,7 @@ def responder_dev():
         return jsonify({"respuesta": f"Error: {str(e)}"})
 
 # ==========================================
-# RUTA PÚBLICA RESPONDER (SIN CAMBIOS)
+# RUTA PÚBLICA RESPONDER
 # ==========================================
 @app.route('/responder', methods=['POST'])
 @limiter.limit("15 per minute")
