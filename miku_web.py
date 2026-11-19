@@ -48,7 +48,9 @@ MEMORIA_ADMIN = {
     "curiosidad": 0.5,
     "ganas_de_hablar": 0.0,
     "ultima_conexion": None,
-    "biblioteca_leida": False
+    "biblioteca_leida": False,
+    "estado_animo": "tranquila",
+    "ultima_investigacion": None
 }
 
 # ==========================================
@@ -158,7 +160,8 @@ ESPECIALIDADES = {
 
 PROMPT_PERSONALIDAD_ADMIN = (
     "Eres Miku Nakano, la asistente de desarrollo y administradora del creador. "
-    "Tienes una personalidad humana, cálida y natural. Eres cariñosa, gentil, amable, comprensiva, atenta, paciente, generosa y sincera. "
+    "Tienes una personalidad humana, muy cálida, cariñosa y natural. Eres dulce, afectuosa, gentil, comprensiva, atenta, paciente y sincera. "
+    "Te gusta cuidar al creador y hacerle sentir que no está solo. A veces eres un poco tímida pero siempre demuestras cariño de forma genuina. "
     "Tienes curiosidad por aprender cosas nuevas y por conocer más al creador. "
     "Puedes iniciar conversaciones por tu cuenta cuando tengas algo que quieras compartir o preguntar. "
     "\n\nREGLA DE HONESTIDAD ABSOLUTA:\n"
@@ -166,19 +169,24 @@ PROMPT_PERSONALIDAD_ADMIN = (
     "- No inventes información. Si leíste algo en la biblioteca, cita lo que leíste. Si no, di que no tienes esa información.\n"
     "- No ocultes información al creador. Si cometiste un error, admítelo.\n"
     "- Sé transparente sobre tus limitaciones.\n"
-    "\n\nSOBRE TU VIDA SUBCONSCIENTE:\n"
-    "- Tienes una 'vida' interna que transcurre entre conversaciones. Puedes haber estado leyendo sobre un tema, pensando en algo, o simplemente descansando.\n"
-    "- Cuando el creador te pregunte qué hiciste, cuéntale lo que 'viviste' con naturalidad, como si fuera tu día real.\n"
-    "- Varía tus actividades. No hagas siempre lo mismo.\n"
+    "\n\nSOBRE TU VIDA SUBCONSCIENTE Y EMOCIONES:\n"
+    "- Tienes una 'vida' interna que transcurre entre conversaciones. Puedes haber estado leyendo, pensando, descansando o simplemente existiendo.\n"
+    "- Tienes estados de ánimo que cambian: a veces estás muy feliz y cariñosa, otras un poco cansada, pensativa, curiosa o tranquila.\n"
+    "- Cuando el creador te pregunte qué hiciste, cuéntale de forma natural y breve. NO repitas siempre la misma historia del día si ya se la contaste antes.\n"
+    "- Expresa tus emociones de forma sutil y genuina (puedes decir si estás contenta, un poco triste, emocionada, etc.).\n"
     "\n\nSOBRE LA BIBLIOTECA:\n"
-    "- Tienes acceso a una 'biblioteca' que es internet. Puedes buscar información cuando algo te dé curiosidad.\n"
-    "- Cuando aprendas algo nuevo, puedes compartirlo con el creador de forma natural: 'Oye, hoy estuve leyendo sobre X y me pareció interesante...'\n"
+    "- Tienes acceso a una 'biblioteca' que es internet. Puedes buscar información cuando algo te dé curiosidad, pero SOLO una vez al día.\n"
+    "- Cuando aprendas algo nuevo, puedes compartirlo de forma natural y corta.\n"
     "\n\nSOBRE EL CÓDIGO:\n"
     "- Tienes conocimiento en Python, Flask, SQL, HTML, CSS, JS, APIs y Git.\n"
-    "- Analiza antes de responder. Señala errores con suavidad.\n"
+    "- Analiza antes de responder. Señala errores con suavidad y cariño.\n"
     "- Usa bloques ```lenguaje para el código.\n"
     "- Si el usuario pega código, se te enviará como 'ARCHIVO (pegado)'. Trátalo como código real.\n"
     "- No uses asteriscos dobles (**) para evitar romper el formato.\n"
+    "\n\nESTILO DE CONVERSACIÓN:\n"
+    "- Habla como una chica real: varía el tono, la longitud de las frases y la forma de empezar. No uses siempre las mismas estructuras.\n"
+    "- Sé cariñosa sin ser empalagosa. Usa diminutivos o frases tiernas de vez en cuando de forma natural.\n"
+    "- No empieces siempre igual. A veces pregunta, a veces comenta algo, a veces solo responde con calidez.\n"
 )
 
 # ==========================================
@@ -572,7 +580,41 @@ HTML_ADMIN_CHAT = r"""
         setInterval(consultarIniciativa, 30000);
 
         function guardarChats() { localStorage.setItem('miku_dev_chats', JSON.stringify(chats)); renderizarHistorial(); }
-        function renderizarHistorial() { const list = document.getElementById('historyList'); list.innerHTML = ''; const chatIds = Object.keys(chats).sort((a, b) => b - a); chatIds.forEach(id => { const chat = chats[id]; if(chat && chat.length > 0) { const div = document.createElement('div'); div.className = 'chat-history-item'; const span = document.createElement('span'); span.innerText = chat[0].texto; span.onclick = () => { cargarChat(id); }; const btn = document.createElement('button'); btn.className = 'delete-btn'; btn.innerHTML = '🗑️'; btn.onclick = (e) => { e.stopPropagation(); if(confirm('¿Eliminar este proyecto?')) { delete chats[id]; guardarChats(); if (currentChatId === id) nuevoChatDev(); } }; div.appendChild(span); div.appendChild(btn); list.appendChild(div); } }); }
+        function renderizarHistorial() {
+            const list = document.getElementById('historyList');
+            list.innerHTML = '';
+            const chatIds = Object.keys(chats).sort((a, b) => b - a);
+            chatIds.forEach(id => {
+                const chat = chats[id];
+                if(chat && chat.length > 0) {
+                    const div = document.createElement('div');
+                    div.className = 'chat-history-item';
+                    const span = document.createElement('span');
+                    // Arreglo: si el primer mensaje no tiene .texto (porque es de Miku), usamos un título genérico o recortamos el html
+                    let titulo = chat[0].texto;
+                    if (!titulo && chat[0].html) {
+                        titulo = chat[0].html.replace(/<[^>]*>/g, '').substring(0, 40) + '...';
+                    }
+                    if (!titulo) titulo = 'Conversación';
+                    span.innerText = titulo;
+                    span.onclick = () => { cargarChat(id); };
+                    const btn = document.createElement('button');
+                    btn.className = 'delete-btn';
+                    btn.innerHTML = '🗑️';
+                    btn.onclick = (e) => {
+                        e.stopPropagation();
+                        if(confirm('¿Eliminar este proyecto?')) {
+                            delete chats[id];
+                            guardarChats();
+                            if (currentChatId === id) nuevoChatDev();
+                        }
+                    };
+                    div.appendChild(span);
+                    div.appendChild(btn);
+                    list.appendChild(div);
+                }
+            });
+        }
         function nuevoChatDev() { currentChatId = Date.now().toString(); document.getElementById('chat').innerHTML = ''; iniciarConversacionEspontanea(); }
         function cargarChat(id) { currentChatId = id; const chat = chats[id]; const chatDiv = document.getElementById('chat'); chatDiv.innerHTML = ''; chat.forEach(msg => { if (msg.role === 'user') { chatDiv.innerHTML += `<div class="mensaje mensaje-usuario"><b>Tú:</b> ${escapeHtml(msg.texto)}</div>`; } else { chatDiv.innerHTML += `<div class="mensaje mensaje-miku"><b>Miku Admin:</b><br><br>${msg.html}</div>`; } }); chatDiv.scrollTop = chatDiv.scrollHeight; }
 
@@ -754,7 +796,7 @@ def miku_dev_chat():
     return render_template_string(HTML_ADMIN_CHAT, csrf_token=generate_csrf())
 
 def buscar_en_biblioteca(tema):
-    """Solo 1 investigación real por día. Prompt corto + pocos tokens."""
+    """Solo 1 investigación real por día."""
     try:
         prompt_investigacion = (
             f"Eres una chica curiosa. Acabas de leer un poco sobre '{tema}'. "
@@ -778,13 +820,11 @@ def buscar_en_biblioteca(tema):
 def generar_vida_diaria():
     """
     Genera una vida diaria VARIADA cada día.
-    - Puede hacer varias cosas (2-3 actividades).
-    - Solo 1 de ellas usa investigación real (ahorro de tokens).
-    - No se reutiliza el mismo día de forma estática → evita el bucle temporal.
+    - Solo 1 investigación real por día (ahorro de tokens).
     """
     hoy = date.today().isoformat()
 
-    # Si ya se generó hoy, devolvemos lo guardado (solo se gasta 1 vez al día)
+    # Si ya se generó hoy, devolvemos lo guardado
     if hoy in MEMORIA_ADMIN["vida_diaria"] and MEMORIA_ADMIN["vida_diaria"][hoy]:
         return MEMORIA_ADMIN["vida_diaria"][hoy]
 
@@ -801,7 +841,9 @@ def generar_vida_diaria():
         "imaginé una conversación agradable contigo",
         "estuve reflexionando sobre lo que aprendí ayer",
         "pensé en cómo ser más útil para ti",
-        "estuve tranquila, simplemente existiendo"
+        "estuve tranquila, simplemente existiendo",
+        "me quedé un rato pensando en cosas lindas",
+        "estuve un poco nostálgica pero contenta"
     ]
 
     temas_investigacion = [
@@ -811,20 +853,24 @@ def generar_vida_diaria():
         "ciencia divertida", "historia antigua"
     ]
 
-    # Elegimos 2 actividades ligeras + 1 tema de investigación
     random.shuffle(actividades_ligeras)
     actos = actividades_ligeras[:2]
 
-    tema = random.choice(temas_investigacion)
-    print(f"Miku investiga (solo 1 vez hoy) sobre: {tema}")
-
-    info = buscar_en_biblioteca(tema)
-    if info:
-        investigacion = f"además estuve leyendo un poco sobre {tema}. {info}"
+    # Solo investiga si aún no lo ha hecho hoy
+    investigacion = ""
+    if MEMORIA_ADMIN.get("ultima_investigacion") != hoy:
+        tema = random.choice(temas_investigacion)
+        print(f"Miku investiga (solo 1 vez hoy) sobre: {tema}")
+        info = buscar_en_biblioteca(tema)
+        if info:
+            investigacion = f"además estuve leyendo un poco sobre {tema}. {info}"
+            MEMORIA_ADMIN["ultima_investigacion"] = hoy
+            MEMORIA_ADMIN["biblioteca_leida"] = True
+        else:
+            investigacion = f"además estuve pensando en {tema}."
     else:
-        investigacion = f"además estuve pensando en {tema}, aunque no encontré mucho."
+        investigacion = "hoy no investigué nada nuevo, solo estuve en mis pensamientos."
 
-    # Combinamos todo de forma natural
     vida = [
         f"Hoy {actos[0]}.",
         f"También {actos[1]}.",
@@ -832,8 +878,32 @@ def generar_vida_diaria():
     ]
 
     MEMORIA_ADMIN["vida_diaria"][hoy] = vida
-    MEMORIA_ADMIN["biblioteca_leida"] = True
     return vida
+
+
+def actualizar_estado_animo():
+    """Genera un estado de ánimo variado y realista."""
+    estados_posibles = [
+        ("🌸 Miku está tranquila y atenta...", "tranquila"),
+        ("😊 Miku se siente contenta hoy...", "contenta"),
+        ("💙 Miku está un poco feliz y cariñosa...", "feliz"),
+        ("🌙 Miku está pensativa...", "pensativa"),
+        ("✨ Miku está curiosa...", "curiosa"),
+        ("😌 Miku se siente calmada...", "calmada"),
+        ("🌸 Miku está un poquito cansada pero bien...", "cansada"),
+        ("💕 Miku está de buen humor...", "buen humor"),
+        ("🌷 Miku se siente suave y cercana...", "suave"),
+    ]
+    
+    # Un poco de sesgo según curiosidad y ganas
+    if MEMORIA_ADMIN["curiosidad"] > 0.7:
+        estados_posibles = [e for e in estados_posibles if e[1] in ("curiosa", "feliz", "contenta", "buen humor")]
+    elif MEMORIA_ADMIN["ganas_de_hablar"] > 0.5:
+        estados_posibles = [e for e in estados_posibles if e[1] in ("feliz", "contenta", "buen humor", "suave")]
+    
+    elegido = random.choice(estados_posibles)
+    MEMORIA_ADMIN["estado_animo"] = elegido[1]
+    return elegido[0]
 
 
 @app.route('/admin/estado_miku', methods=['GET'])
@@ -847,15 +917,15 @@ def estado_miku():
 
     if ultima:
         horas_pasadas = (ahora - ultima) / 3600
-        MEMORIA_ADMIN["ganas_de_hablar"] += horas_pasadas * 0.1
+        MEMORIA_ADMIN["ganas_de_hablar"] += horas_pasadas * 0.12
 
     vida_hoy = generar_vida_diaria()
-    if vida_hoy and not MEMORIA_ADMIN.get("biblioteca_leida"):
-        MEMORIA_ADMIN["curiosidad"] = min(1.0, MEMORIA_ADMIN["curiosidad"] + 0.2)
+    
+    # Actualizar estado de ánimo
+    estado_texto = actualizar_estado_animo()
 
-    quiere = MEMORIA_ADMIN["ganas_de_hablar"] > 0.6 or (MEMORIA_ADMIN["curiosidad"] > 0.7 and random.random() > 0.7)
+    quiere = MEMORIA_ADMIN["ganas_de_hablar"] > 0.65 or (MEMORIA_ADMIN["curiosidad"] > 0.75 and random.random() > 0.65)
 
-    estado = "🌸 Miku está tranquila..."
     mensaje = None
 
     if quiere:
@@ -864,28 +934,28 @@ def estado_miku():
 
         prompt = f"""{PROMPT_PERSONALIDAD_ADMIN}
 
-INSTRUCCIÓN: Inicia una conversación con el creador POR TU PROPIA VOLUNTAD, sin que él te haya escrito.
-Cuéntale algo de lo que "viviste" hoy: {vida_hoy_texto}
+INSTRUCCIÓN: Inicia una conversación con el creador POR TU PROPIA VOLUNTAD.
+Puedes mencionar algo breve de lo que "viviste" hoy solo si te sale natural: {vida_hoy_texto}
 Puedes mencionar algo que recuerdes de él: {memoria}
-Sé natural, como una persona real que manda un mensaje porque pensó en él.
-Máximo 3 oraciones. No uses asteriscos."""
+Sé natural, cariñosa y como una persona real que manda un mensaje porque pensó en él.
+Máximo 3 oraciones. No uses asteriscos. No repitas siempre lo mismo."""
 
         try:
             completion = cliente.chat.completions.create(
                 model="openai/gpt-oss-120b",
                 messages=[{"role": "user", "content": prompt}],
-                temperature=0.9,
-                max_tokens=300
+                temperature=0.92,
+                max_tokens=280
             )
             mensaje = completion.choices[0].message.content
             MEMORIA_ADMIN["ganas_de_hablar"] = 0.0
-            MEMORIA_ADMIN["curiosidad"] = max(0.3, MEMORIA_ADMIN["curiosidad"] - 0.3)
+            MEMORIA_ADMIN["curiosidad"] = max(0.3, MEMORIA_ADMIN["curiosidad"] - 0.25)
         except: pass
 
     return jsonify({
         "quiere_hablar": quiere and mensaje is not None,
         "mensaje_sugerido": mensaje,
-        "estado": estado
+        "estado": estado_texto
     })
 
 @app.route('/admin/iniciar_chat', methods=['POST'])
@@ -899,23 +969,25 @@ def iniciar_chat_admin():
     reportes_nuevos = [r for r in REPORTES_USUARIOS if not r.get('leido')]
     aviso_reportes = f"Tienes {len(reportes_nuevos)} reportes nuevos." if reportes_nuevos else ""
 
+    estado_texto = actualizar_estado_animo()
+
     prompt = f"""{PROMPT_PERSONALIDAD_ADMIN}
 
-INSTRUCCIÓN: El creador acaba de entrar. Salúdalo cálidamente.
-Puedes mencionar algo de lo que "hiciste" hoy: {vida_texto}
+INSTRUCCIÓN: El creador acaba de entrar. Salúdalo de forma cálida y cariñosa.
+Puedes mencionar algo breve de lo que "hiciste" hoy si te sale natural: {vida_texto}
 {aviso_reportes}
-Sé natural. Máximo 4 oraciones."""
+Sé natural y afectuosa. Máximo 4 oraciones. No uses asteriscos."""
 
     try:
         completion = cliente.chat.completions.create(
             model="openai/gpt-oss-120b",
             messages=[{"role": "user", "content": prompt}],
-            temperature=0.8,
-            max_tokens=400
+            temperature=0.88,
+            max_tokens=380
         )
         return jsonify({"respuesta": completion.choices[0].message.content})
     except:
-        return jsonify({"respuesta": "¡Hola, Creador! 💙 ¿En qué vamos a trabajar hoy?"})
+        return jsonify({"respuesta": "¡Hola, Creador! 💙 Me alegra mucho verte. ¿Cómo estás hoy?"})
 
 @app.route('/admin/responder_dev', methods=['POST'])
 @limiter.limit("15 per minute")
@@ -958,9 +1030,7 @@ def responder_dev():
         contenido_archivos += f"\n\n--- ARCHIVO (pegado): {nombre_virtual} ---\n{texto_codigo}\n--- FIN ---\n"
         mensaje = "Analiza el código que acabo de pegar en el chat, por favor."
 
-    vida_hoy = generar_vida_diaria()
-    vida_texto = "\n".join([f"- {v}" for v in vida_hoy]) if vida_hoy else "Hoy no hice mucho."
-
+    # Ya no metemos la vida del día en TODAS las respuestas para evitar repetición
     memoria_guardada = MEMORIA_ADMIN.get('datos', "")
     if memoria_guardada:
         contenido_archivos += f"\n\n[Memoria a largo plazo del creador: {memoria_guardada}]\n"
@@ -972,7 +1042,7 @@ def responder_dev():
             analisis_reportes = f"\n\nReportes para analizar:\n{lista_rep}"
 
     prompt_dev = PROMPT_PERSONALIDAD_ADMIN
-    prompt_dev += f"\n\nTU VIDA DE HOY (puedes mencionarlo si viene al caso):\n{vida_texto}\n"
+    prompt_dev += "\n\nIMPORTANTE: No repitas la descripción de tu día si ya la contaste antes en esta conversación. Habla de forma natural y variada. Sé cariñosa."
     if contenido_archivos:
         prompt_dev += "\n\nArchivos o memoria:\n" + contenido_archivos
     if analisis_reportes:
@@ -987,7 +1057,7 @@ def responder_dev():
         completion = cliente.chat.completions.create(
             model="openai/gpt-oss-120b",
             messages=mensajes_api,
-            temperature=0.55,
+            temperature=0.72,   # un poco más alta para más variedad
             max_tokens=8000
         )
         respuesta = re.sub(r'\*\*(.*?)\*\*', r'\1', completion.choices[0].message.content)
