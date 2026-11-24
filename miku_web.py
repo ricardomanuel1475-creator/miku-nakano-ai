@@ -62,7 +62,7 @@ app.config['GOOGLE_CLIENT_SECRET'] = os.environ.get('GOOGLE_CLIENT_SECRET', "GOC
 oauth = OAuth(app)
 oauth.register(name='google', server_metadata_url='https://accounts.google.com/.well-known/openid-configuration', client_kwargs={'scope': 'openid email profile'})
 
-GROQ_API_KEY = os.environ.get('GROQ_API_KEY', "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")
+GROQ_API_KEY = os.environ.get('GROQ_API_KEY', "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")
 cliente = Groq(api_key=GROQ_API_KEY)
 
 ALLOWED_EXTENSIONS = {'txt', 'py', 'js', 'html', 'css', 'md', 'json', 'pdf', 'png', 'jpg', 'jpeg', 'webp', 'gif'}
